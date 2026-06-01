@@ -57,6 +57,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action']) && $_POST['action'] === 'send_message') {
         $trackingCode = $_POST['tracking_code'] ?? '';
         $message = trim($_POST['message'] ?? '');
+
+        if (!empty($message)) {
+
+        $report = getReportByTrackingCode($conn, $trackingCode);
+        sendMessage($conn, $report["id"], $message, 'whistleblower');
+        
+        // Get admin emails to notify
+        $stmt = $conn->prepare("SELECT email, name FROM users WHERE role IN ('admin', 'super_admin') AND is_active = 1");
+        $stmt->execute();
+        $admins = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Get report details
+        $stmt = $conn->prepare("SELECT tracking_code FROM reports WHERE id = ?");
+        $stmt->execute([$report['id']]);
+        $report = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        // Send email notification to all admins
+        foreach ($admins as $admin) {
+            sendNewMessageEmail(
+                $admin['email'],
+                $admin['name'],
+                $report['id'],
+                $report['tracking_code'],
+                $message
+            );
+        }
+        
+        $_SESSION['message_success'] = 'Message sent successfully!';
+        header('Location: ../view-reports.php');
+        exit;
+    }
         
         if (empty($trackingCode) || empty($message)) {
             $_SESSION['message_error'] = 'Message cannot be empty';

@@ -33,7 +33,7 @@ foreach ($publicReports as $report) {
         'status' => $report['status'],
         'priority' => $report['priority'],
         'created_at' => $report['created_at'],
-        'has_evidence' => false // Will be checked later
+        'has_evidence' => false
     ];
 }
 ?>
@@ -191,6 +191,45 @@ foreach ($publicReports as $report) {
             color: white;
         }
         
+        /* Retractable Filter Section Styles */
+        .filter-toggle {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: rgba(26, 31, 45, 0.5);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .filter-toggle:hover {
+            background: rgba(79, 70, 229, 0.2);
+        }
+        
+        .filter-toggle-icon {
+            transition: transform 0.3s ease;
+        }
+        
+        .filter-toggle-icon.rotated {
+            transform: rotate(180deg);
+        }
+        
+        .filter-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out;
+        }
+        
+        .filter-content.show {
+            max-height: 500px;
+            transition: max-height 0.5s ease-in;
+        }
+        
+        .filter-buttons-wrapper {
+            padding: 20px;
+        }
+        
         .navbar-glass {
             background: rgba(15, 19, 34, 0.85);
             backdrop-filter: blur(20px);
@@ -282,9 +321,26 @@ foreach ($publicReports as $report) {
             margin-bottom: 20px;
             opacity: 0.5;
         }
-        .nav-header{
+        
+        .nav-header {
             display: flex;
             justify-content: space-between;
+            align-items: center;
+        }
+        
+        .filter-stats {
+            font-size: 0.8rem;
+            color: #8b92b0;
+        }
+        
+        @media (max-width: 768px) {
+            .filter-btn {
+                padding: 6px 12px;
+                font-size: 0.75rem;
+            }
+            .filter-toggle {
+                padding: 10px 15px;
+            }
         }
     </style>
 </head>
@@ -307,10 +363,10 @@ foreach ($publicReports as $report) {
         </div>
     </nav>
     
-    <div class="content-wrapper" style="margin-top: 30px;">
+    <div class="content-wrapper" style="margin-top: 90px;">
         <div class="container">
             <!-- Header -->
-            <div class="text-center mb-5">
+            <div class="text-center mb-4">
                 <h1 class="display-5 fw-bold mb-3">
                     <i class="fas fa-shield-alt me-2" style="color: #4f46e5;"></i>
                     WhistleGuard
@@ -320,22 +376,43 @@ foreach ($publicReports as $report) {
                 </p>
             </div>
             
-            <!-- Category Filters -->
-            <div class="glass-card p-4 mb-5">
-                <h6 class="fw-bold mb-3">
-                    <i class="fas fa-filter me-2" style="color: #4f46e5;"></i>Filter by Category
-                </h6>
-                <div class="d-flex flex-wrap">
-                    <a href="dashboard.php?category=all&page=1" 
-                       class="filter-btn <?php echo $categoryFilter == 'all' ? 'active' : ''; ?>">
-                        All Reports
-                    </a>
-                    <?php foreach ($categories as $category): ?>
-                    <a href="dashboard.php?category=<?php echo urlencode($category['name']); ?>&page=1" 
-                       class="filter-btn <?php echo $categoryFilter == $category['name'] ? 'active' : ''; ?>">
-                        <?php echo htmlspecialchars($category['name']); ?>
-                    </a>
-                    <?php endforeach; ?>
+            <!-- Retractable Category Filters -->
+            <div class="glass-card mb-4">
+                <div class="filter-toggle" id="filterToggle">
+                    <div>
+                        <i class="fas fa-filter me-2" style="color: #4f46e5;"></i>
+                        <strong>Filter by Category</strong>
+                        <span class="filter-stats ms-2">
+                            <i class="fas fa-chart-simple me-1"></i><?php echo count($categories); ?> categories
+                        </span>
+                    </div>
+                    <div class="filter-toggle-icon" id="filterToggleIcon">
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div class="filter-content" id="filterContent">
+                    <div class="filter-buttons-wrapper">
+                        <div class="d-flex flex-wrap">
+                            <a href="dashboard.php?category=all&page=1" 
+                               class="filter-btn <?php echo $categoryFilter == 'all' ? 'active' : ''; ?>">
+                                <i class="fas fa-globe me-1"></i>All Reports
+                            </a>
+                            <?php foreach ($categories as $category): ?>
+                            <a href="dashboard.php?category=<?php echo urlencode($category['name']); ?>&page=1" 
+                               class="filter-btn <?php echo $categoryFilter == $category['name'] ? 'active' : ''; ?>">
+                                <i class="fas fa-tag me-1"></i><?php echo htmlspecialchars($category['name']); ?>
+                            </a>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php if ($categoryFilter != 'all'): ?>
+                        <div class="mt-3 pt-2 border-top border-white border-opacity-10">
+                            <span class="text-muted-custom small">
+                                <i class="fas fa-chart-line me-1"></i>
+                                Showing reports in <strong class="text-primary"><?php echo htmlspecialchars($categoryFilter); ?></strong> category
+                            </span>
+                        </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             
@@ -408,7 +485,11 @@ foreach ($publicReports as $report) {
                                 <i class="fas fa-chevron-left"></i>
                             </a>
                         </li>
-                        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                        <?php 
+                        $startPage = max(1, $currentPage - 2);
+                        $endPage = min($totalPages, $currentPage + 2);
+                        for ($i = $startPage; $i <= $endPage; $i++): 
+                        ?>
                         <li class="page-item <?php echo $i == $currentPage ? 'active' : ''; ?>">
                             <a class="page-link" href="?category=<?php echo urlencode($categoryFilter); ?>&page=<?php echo $i; ?>">
                                 <?php echo $i; ?>
@@ -453,7 +534,6 @@ foreach ($publicReports as $report) {
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body" id="modalBody">
-                    <!-- Dynamic content loaded via JS -->
                     <div class="text-center py-4">
                         <div class="spinner-border text-primary" role="status">
                             <span class="visually-hidden">Loading...</span>
@@ -497,6 +577,42 @@ foreach ($publicReports as $report) {
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Retractable Filter Toggle
+        const filterToggle = document.getElementById('filterToggle');
+        const filterContent = document.getElementById('filterContent');
+        const filterToggleIcon = document.getElementById('filterToggleIcon');
+        
+        // Check localStorage for filter state
+        const filterState = localStorage.getItem('filterExpanded');
+        if (filterState === 'expanded') {
+            filterContent.classList.add('show');
+            filterToggleIcon.classList.add('rotated');
+        } else if (filterState === 'collapsed') {
+            filterContent.classList.remove('show');
+            filterToggleIcon.classList.remove('rotated');
+        } else {
+            // Default: collapsed on mobile, expanded on desktop
+            if (window.innerWidth <= 768) {
+                filterContent.classList.remove('show');
+                filterToggleIcon.classList.remove('rotated');
+            } else {
+                filterContent.classList.add('show');
+                filterToggleIcon.classList.add('rotated');
+            }
+        }
+        
+        filterToggle.addEventListener('click', function() {
+            filterContent.classList.toggle('show');
+            filterToggleIcon.classList.toggle('rotated');
+            
+            // Save state to localStorage
+            if (filterContent.classList.contains('show')) {
+                localStorage.setItem('filterExpanded', 'expanded');
+            } else {
+                localStorage.setItem('filterExpanded', 'collapsed');
+            }
+        });
+        
         // View report details
         document.querySelectorAll('.view-report-btn').forEach(btn => {
             btn.addEventListener('click', async function() {
@@ -514,7 +630,6 @@ foreach ($publicReports as $report) {
                 
                 modal.show();
                 
-                // Fetch report details including evidence
                 try {
                     const response = await fetch(`app/get-report-details.php?report_id=${reportId}`);
                     const data = await response.json();
@@ -525,7 +640,7 @@ foreach ($publicReports as $report) {
                             evidencesHtml = `
                                 <div class="mt-4">
                                     <h6 class="fw-bold mb-3">
-                                        <i class="fas fa-paperclip me-2" style="color: #4f46e5;"></i>Evidence Files
+                                        <i class="fas fa-paperclip me-2" style="color: #4f46e5;"></i>Evidence Files (Unlimited Views)
                                     </h6>
                                     <div class="list-group">
                                         ${data.evidences.map(ev => `
@@ -547,6 +662,9 @@ foreach ($publicReports as $report) {
                                             </div>
                                         `).join('')}
                                     </div>
+                                    <small class="text-muted-custom mt-2 d-block">
+                                        <i class="fas fa-infinity me-1"></i>No view limits - Download as many times as needed
+                                    </small>
                                 </div>
                             `;
                         } else {
@@ -575,7 +693,7 @@ foreach ($publicReports as $report) {
                                         <i class="fas fa-calendar-alt me-1"></i>Submitted: ${data.created_at}
                                     </small>
                                 </div>
-                                <div class="glass-card-light p-3 mb-3">
+                                <div class="glass-card-light p-3 mb-3" style="background: rgba(26, 31, 45, 0.5); border-radius: 12px;">
                                     <strong class="d-block mb-2">Description:</strong>
                                     <p class="mb-0" style="line-height: 1.6;">${escapeHtml(data.description).replace(/\n/g, '<br>')}</p>
                                 </div>
@@ -610,7 +728,7 @@ foreach ($publicReports as $report) {
             });
         });
         
-        // View evidence function
+        // View evidence function with unlimited access
         async function viewEvidence(reportId, evidenceId) {
             const modal = new bootstrap.Modal(document.getElementById('evidenceModal'));
             const proceedBtn = document.getElementById('proceedViewBtn');
@@ -629,7 +747,7 @@ foreach ($publicReports as $report) {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: `report_id=${reportId}&evidence_id=${evidenceId}`
+                    body: `report_id=${reportId}&evidence_id=${evidenceId}&unlimited=1`
                 });
                 const data = await response.json();
                 
@@ -637,16 +755,16 @@ foreach ($publicReports as $report) {
                 
                 if (data.success) {
                     container.innerHTML = `
-                        <div class="alert alert-warning small">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            This access link will expire in 1 hour and can only be used once.
+                        <div class="alert alert-info small">
+                            <i class="fas fa-infinity me-2"></i>
+                            Unlimited access - You can view/download this evidence multiple times.
                         </div>
                     `;
                     
                     proceedBtn.style.display = 'inline-block';
                     proceedBtn.onclick = () => {
                         window.open(data.view_url, '_blank');
-                        modal.hide();
+                        // Don't close modal so user can download multiple times
                     };
                 } else {
                     container.innerHTML = `
@@ -673,7 +791,25 @@ foreach ($publicReports as $report) {
             return div.innerHTML;
         }
         
-        console.log('%c🔒 PUBLIC DASHBOARD: Viewing approved anonymous reports.', 'color: #4f46e5; font-size: 12px; font-weight: bold;');
+        // Remember filter state on window resize
+        let resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                // Don't auto-change if user has manually set preference
+                if (!localStorage.getItem('filterExpanded')) {
+                    if (window.innerWidth <= 768) {
+                        filterContent.classList.remove('show');
+                        filterToggleIcon.classList.remove('rotated');
+                    } else {
+                        filterContent.classList.add('show');
+                        filterToggleIcon.classList.add('rotated');
+                    }
+                }
+            }, 250);
+        });
+        
+        console.log('%c🔒 PUBLIC DASHBOARD: Viewing approved anonymous reports with unlimited evidence access.', 'color: #4f46e5; font-size: 12px; font-weight: bold;');
     </script>
 
     <script src="inc/background.js"></script>

@@ -1,5 +1,8 @@
 <?php
-// app/model/report.php
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception;
+require_once __DIR__ . '/../../inc/smtp-config.php';
 
 // Define encryption key (must match the one in submit-report.php)
 define('ENCRYPTION_KEY', hex2bin('7a8f5c3e2d1b4a6c9e7f8d3c2b1a4f6e8d7c9a5b3e2f1c8d7a6b4f2e1c3d5a7b'));
@@ -423,4 +426,351 @@ function fetch_report_evidence($conn, $reportId){
     $stmt->execute([$reportId]);
     $evidences = $stmt->fetchAll(PDO::FETCH_ASSOC);
     return $evidences;
+}
+
+/**
+ * Get count of reports with unread messages from whistleblowers
+ */
+function getUnreadMessagesCount($conn) {
+    $sql = "
+        SELECT COUNT(DISTINCT r.id) as count
+        FROM reports r
+        JOIN messages m ON r.id = m.report_id
+        WHERE m.sender_type = 'whistleblower' 
+        AND m.is_read = FALSE
+        AND r.status != 'closed'
+    ";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result ? $result['count'] : 0;
+}
+
+/**
+ * Get unread messages count for a specific report
+ */
+function getReportUnreadCount($conn, $reportId) {
+    $sql = "
+        SELECT COUNT(*) as count
+        FROM messages
+        WHERE report_id = ? 
+        AND sender_type = 'whistleblower' 
+        AND is_read = FALSE
+    ";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$reportId]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result ? $result['count'] : 0;
+}
+
+/**
+ * Mark all messages in a report as read (for when admin views the report)
+ */
+function markReportMessagesAsRead($conn, $reportId) {
+    $stmt = $conn->prepare("
+        UPDATE messages 
+        SET is_read = TRUE, read_at = NOW() 
+        WHERE report_id = ? AND sender_type = 'whistleblower' AND is_read = FALSE
+    ");
+    return $stmt->execute([$reportId]);
+}
+
+// app/model/report.php - Add these functions
+
+
+
+/**
+ * Send email notification to admin about new report using PHPMailer
+ */
+function sendNewReportEmail($adminEmail, $adminName, $reportId, $trackingCode, $category, $priority) {
+    $mail = new PHPMailer(true);
+    
+    try {
+        // Server settings
+        $mail->isSMTP();
+        $mail->Host       = SMTP_HOST;
+        $mail->SMTPAuth   = SMTP_AUTH;
+        $mail->Username   = SMTP_USERNAME;
+        $mail->Password   = SMTP_PASSWORD;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port       = SMTP_PORT;
+        $mail->setLanguage('en');
+        
+        // Recipients
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addAddress($adminEmail, $adminName);
+        $mail->addReplyTo(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        
+        // Email content
+        $mail->isHTML(true);
+        $mail->Subject = "🔔 New Whistleblower Report Submitted - Report #" . $reportId;
+        
+        // HTML Email Template
+        $htmlContent = '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>New Report Notification</title>
+            <style>
+                body {
+                    font-family: "Inter", Arial, sans-serif;
+                    background: #f4f4f4;
+                    margin: 0;
+                    padding: 20px;
+                }
+                .container {
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background: #ffffff;
+                    border-radius: 16px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                }
+                .header {
+                    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+                    padding: 30px;
+                    text-align: center;
+                }
+                .header h1 {
+                    color: white;
+                    margin: 0;
+                    font-size: 24px;
+                }
+                .content {
+                    padding: 30px;
+                    background: #ffffff;
+                }
+                .report-details {
+                    background: #f8fafc;
+                    border-radius: 12px;
+                    padding: 20px;
+                    margin: 20px 0;
+                    border-left: 4px solid #4f46e5;
+                }
+                .detail-row {
+                    margin: 10px 0;
+                    padding: 8px 0;
+                    border-bottom: 1px solid #e2e8f0;
+                }
+                .detail-label {
+                    font-weight: 600;
+                    color: #1e293b;
+                    display: inline-block;
+                    width: 120px;
+                }
+                .detail-value {
+                    color: #475569;
+                }
+                .tracking-code {
+                    background: #1e293b;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 8px;
+                    font-family: monospace;
+                    font-size: 18px;
+                    letter-spacing: 1px;
+                    display: inline-block;
+                    margin: 10px 0;
+                }
+                .button {
+                    display: inline-block;
+                    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+                    color: white;
+                    text-decoration: none;
+                    padding: 12px 24px;
+                    border-radius: 8px;
+                    margin-top: 20px;
+                    font-weight: 600;
+                }
+                .footer {
+                    background: #f1f5f9;
+                    padding: 20px;
+                    text-align: center;
+                    font-size: 12px;
+                    color: #64748b;
+                }
+                .priority-high { color: #ef4444; font-weight: bold; }
+                .priority-medium { color: #f59e0b; font-weight: bold; }
+                .priority-low { color: #10b981; font-weight: bold; }
+                .priority-critical { color: #dc2626; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔔 New Whistleblower Report</h1>
+                </div>
+                <div class="content">
+                    <p>Dear <strong>' . htmlspecialchars($adminName) . '</strong>,</p>
+                    <p>A new anonymous report has been submitted on the WhistleGuard platform.</p>
+                    
+                    <div class="report-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Report ID:</span>
+                            <span class="detail-value">#' . $reportId . '</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Tracking Code:</span>
+                            <span class="detail-value"><code>' . htmlspecialchars($trackingCode) . '</code></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Category:</span>
+                            <span class="detail-value">' . htmlspecialchars($category) . '</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Priority:</span>
+                            <span class="detail-value priority-' . strtolower($priority) . '">' . ucfirst($priority) . '</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Submitted:</span>
+                            <span class="detail-value">' . date('F j, Y g:i A') . '</span>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <a href="http://' . $_SERVER['HTTP_HOST'] . '/whistleblower/admin-view-report.php?id=' . $reportId . '" class="button">
+                            📋 View Report Details
+                        </a>
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from WhistleGuard.<br>
+                    Please do not reply to this email.</p>
+                    <p>&copy; ' . date('Y') . ' WhistleGuard</p>
+                </div>
+            </div>
+        </body>
+        </html>';
+        
+        $mail->Body = $htmlContent;
+        $mail->AltBody = "New Report #{$reportId}\nTracking: {$trackingCode}\nCategory: {$category}\nPriority: {$priority}\n\nView at: http://" . $_SERVER['HTTP_HOST'] . "/whistleblower/admin-view-report.php?id={$reportId}";
+        
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("Email could not be sent. Error: {$mail->ErrorInfo}");
+        return false;
+    }
+}
+
+/**
+ * Send email notification for new message
+ */
+function sendNewMessageEmail($adminEmail, $adminName, $reportId, $trackingCode, $messagePreview) {
+    $mail = new PHPMailer(true);
+    
+    try {
+        $mail->isSMTP();
+        $mail->Host       = SMTP_HOST;
+        $mail->SMTPAuth   = SMTP_AUTH;
+        $mail->Username   = SMTP_USERNAME;
+        $mail->Password   = SMTP_PASSWORD;
+        $mail->SMTPSecure = SMTP_SECURE;
+        $mail->Port       = SMTP_PORT;
+        
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->addAddress($adminEmail, $adminName);
+        
+        $mail->isHTML(true);
+        $mail->Subject = "💬 New Message Received - Report #" . $reportId;
+        
+        $htmlContent = '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>New Message Notification</title>
+            <style>
+                body {
+                    font-family: "Inter", Arial, sans-serif;
+                    background: #f4f4f4;
+                    margin: 0;
+                    padding: 20px;
+                }
+                .container {
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background: #ffffff;
+                    border-radius: 16px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                }
+                .header {
+                    background: linear-gradient(135deg, #10b981, #059669);
+                    padding: 30px;
+                    text-align: center;
+                }
+                .header h1 {
+                    color: white;
+                    margin: 0;
+                    font-size: 24px;
+                }
+                .content {
+                    padding: 30px;
+                    background: #ffffff;
+                }
+                .message-preview {
+                    background: #f0fdf4;
+                    border-left: 4px solid #10b981;
+                    padding: 15px;
+                    margin: 20px 0;
+                    border-radius: 8px;
+                }
+                .button {
+                    display: inline-block;
+                    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+                    color: white;
+                    text-decoration: none;
+                    padding: 12px 24px;
+                    border-radius: 8px;
+                    margin-top: 20px;
+                    font-weight: 600;
+                }
+                .footer {
+                    background: #f1f5f9;
+                    padding: 20px;
+                    text-align: center;
+                    font-size: 12px;
+                    color: #64748b;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>💬 New Message Received</h1>
+                </div>
+                <div class="content">
+                    <p>Dear <strong>' . htmlspecialchars($adminName) . '</strong>,</p>
+                    <p>The whistleblower has sent a new message regarding Report #' . $reportId . '.</p>
+                    
+                    <div class="message-preview">
+                        <strong>Message Preview:</strong><br>
+                        "' . htmlspecialchars(substr($messagePreview, 0, 200)) . (strlen($messagePreview) > 200 ? '...' : '') . '"
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <a href="http://' . $_SERVER['HTTP_HOST'] . '/whistleblower/admin-view-report.php?id=' . $reportId . '" class="button">
+                            💬 Reply to Message
+                        </a>
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from WhistleGuard.</p>
+                    <p>&copy; ' . date('Y') . ' WhistleGuard</p>
+                </div>
+            </div>
+        </body>
+        </html>';
+        
+        $mail->Body = $htmlContent;
+        $mail->AltBody = "New message on Report #{$reportId}\n\nMessage: {$messagePreview}\n\nReply at: http://" . $_SERVER['HTTP_HOST'] . "/whistleblower/admin-view-report.php?id={$reportId}";
+        
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("Email could not be sent. Error: {$mail->ErrorInfo}");
+        return false;
+    }
 }

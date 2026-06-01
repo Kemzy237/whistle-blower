@@ -14,24 +14,43 @@ if (empty($token)) {
 // Clear session token
 unset($_SESSION['public_access_token']);
 
-// Validate access token
+// Validate access token (allow used tokens for unlimited access)
 $stmt = $conn->prepare("
     SELECT id, report_id, token, type, expires_at, used_at 
     FROM access_tokens 
-    WHERE token = ? AND type = 'view_evidence' AND expires_at > NOW() AND used_at IS NULL
+    WHERE token = ? AND type = 'view_evidence' AND expires_at > NOW()
 ");
 $stmt->execute([$token]);
 $accessToken = $stmt->fetch(PDO::FETCH_ASSOC);
 
+// For unlimited tokens, allow even if used
+$isUnlimited = false;
 if (!$accessToken) {
-    die('<html><head><title>Access Expired</title><style>body{background:#0a0e1a;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;}</style></head><body><div style="text-align:center"><h1>Access Token Expired</h1><p>The access link has expired or has already been used.</p><a href="dashboard.php" style="color:#4f46e5;">Return to Dashboard</a></div></body></html>');
+    // Check if token exists but was used (unlimited access)
+    $stmt = $conn->prepare("
+        SELECT id, report_id, token, type, expires_at, used_at 
+        FROM access_tokens 
+        WHERE token = ? AND type = 'view_evidence' AND expires_at > DATE_SUB(NOW(), INTERVAL 1 DAY)
+    ");
+    $stmt->execute([$token]);
+    $accessToken = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($accessToken && $accessToken['used_at'] !== null) {
+        $isUnlimited = true; // Allow reuse for unlimited tokens
+    }
 }
 
-// Mark token as used
-$stmt = $conn->prepare("UPDATE access_tokens SET used_at = NOW() WHERE id = ?");
-$stmt->execute([$accessToken['id']]);
+if (!$accessToken) {
+    die('<html><head><title>Access Expired</title><style>body{background:#0a0e1a;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;}</style></head><body><div style="text-align:center"><h1>Access Token Expired</h1><p>The access link has expired.</p><a href="dashboard.php" style="color:#4f46e5;">Return to Dashboard</a></div></body></html>');
+}
 
-// Get evidence (only public)
+// Only mark as used if not unlimited
+if (!$isUnlimited && $accessToken['used_at'] === null) {
+    $stmt = $conn->prepare("UPDATE access_tokens SET used_at = NOW() WHERE id = ?");
+    $stmt->execute([$accessToken['id']]);
+}
+
+// Get evidence
 $evidenceId = $_SESSION['token_evidence_id'] ?? null;
 unset($_SESSION['token_evidence_id']);
 
@@ -62,7 +81,7 @@ if (!$evidence) {
     die('<html><head><title>Not Found</title><style>body{background:#0a0e1a;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;}</style></head><body><div style="text-align:center"><h1>Evidence Not Found</h1><p>The requested evidence could not be found or is not public.</p><a href="dashboard.php" style="color:#4f46e5;">Return to Dashboard</a></div></body></html>');
 }
 
-// Update view count
+// Update view count (always increment, even for unlimited)
 $stmt = $conn->prepare("UPDATE evidences SET view_count = view_count + 1, updated_at = NOW() WHERE id = ?");
 $stmt->execute([$evidence['id']]);
 

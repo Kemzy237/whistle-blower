@@ -26,6 +26,7 @@ $statusFilter = $_GET['status'] ?? 'all';
 $priorityFilter = $_GET['priority'] ?? 'all';
 $categoryFilter = $_GET['category'] ?? 'all';
 $searchQuery = trim($_GET['search'] ?? '');
+$unreadFilter = $_GET['unread'] ?? 'all'; // New filter for unread messages
 
 // Build the query with filters
 $sql = "
@@ -68,6 +69,35 @@ if (!empty($searchQuery)) {
     $params[] = $searchParam;
 }
 
+// Add unread messages filter
+if ($unreadFilter === 'with_unread') {
+    $sql .= " AND EXISTS (
+        SELECT 1 FROM messages m 
+        WHERE m.report_id = r.id 
+        AND m.sender_type = 'whistleblower' 
+        AND m.is_read = FALSE
+    )";
+    $countSql .= " AND EXISTS (
+        SELECT 1 FROM messages m 
+        WHERE m.report_id = r.id 
+        AND m.sender_type = 'whistleblower' 
+        AND m.is_read = FALSE
+    )";
+} elseif ($unreadFilter === 'without_unread') {
+    $sql .= " AND NOT EXISTS (
+        SELECT 1 FROM messages m 
+        WHERE m.report_id = r.id 
+        AND m.sender_type = 'whistleblower' 
+        AND m.is_read = FALSE
+    )";
+    $countSql .= " AND NOT EXISTS (
+        SELECT 1 FROM messages m 
+        WHERE m.report_id = r.id 
+        AND m.sender_type = 'whistleblower' 
+        AND m.is_read = FALSE
+    )";
+}
+
 // Get total count for pagination
 $stmt = $conn->prepare($countSql);
 $stmt->execute($params);
@@ -91,6 +121,18 @@ $newCount = count_reports($conn, "new");
 $investigatingCount = count_reports($conn, "investigating");
 $resolvedCount = count_reports($conn, "resolved");
 $closedCount = count_reports($conn, "closed");
+
+// Get count of reports with unread messages
+$stmt = $conn->prepare("
+    SELECT COUNT(DISTINCT r.id) as count
+    FROM reports r
+    JOIN messages m ON r.id = m.report_id
+    WHERE m.sender_type = 'whistleblower' 
+    AND m.is_read = FALSE
+    AND r.status != 'closed'
+");
+$stmt->execute();
+$unreadReportsCount = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
 
 ?>
 <!DOCTYPE html>
@@ -183,6 +225,36 @@ $closedCount = count_reports($conn, "closed");
         .stat-filter-number {
             font-size: 1.8rem;
             font-weight: 800;
+        }
+        
+        /* Unread Filter Card */
+        .unread-filter-card {
+            background: rgba(239, 68, 68, 0.15);
+            backdrop-filter: blur(12px);
+            border-radius: 16px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 15px 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+        }
+        
+        .unread-filter-card:hover {
+            transform: translateY(-3px);
+            background: rgba(239, 68, 68, 0.25);
+            border-color: rgba(239, 68, 68, 0.5);
+        }
+        
+        .unread-filter-card.active {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: rgba(239, 68, 68, 0.7);
+        }
+        
+        .unread-filter-number {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #ef4444;
         }
         
         /* Glass Card */
@@ -369,6 +441,29 @@ $closedCount = count_reports($conn, "closed");
             color: #8b92b0;
         }
         
+        /* Unread Message Badge on Report Row */
+        .unread-message-badge {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 20px;
+            margin-left: 8px;
+            gap: 4px;
+        }
+        
+        .unread-message-badge i {
+            font-size: 0.65rem;
+        }
+        
+        .has-unread {
+            border-left: 3px solid #ef4444;
+        }
+        
         /* Responsive */
         @media (max-width: 992px) {
             .sidebar {
@@ -387,7 +482,7 @@ $closedCount = count_reports($conn, "closed");
         }
         
         @media (max-width: 768px) {
-            .stat-filter-number {
+            .stat-filter-number, .unread-filter-number {
                 font-size: 1.3rem;
             }
             .reports-table th,
@@ -413,6 +508,15 @@ $closedCount = count_reports($conn, "closed");
             background: rgba(79, 70, 229, 0.5);
             border-radius: 10px;
         }
+        .unread-filter-note {
+    display: inline-block;
+    background: #ef4444;
+    color: white;
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    margin-left: 8px;
+}
     </style>
 </head>
 <body>
@@ -440,7 +544,7 @@ $closedCount = count_reports($conn, "closed");
         <!-- Stats Filter Row -->
         <div class="row g-3 mb-4">
             <div class="col-md-2 col-6">
-                <a href="?status=all&priority=all&category=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'all' && $priorityFilter == 'all' && $categoryFilter == 'all' ? 'active' : ''; ?>">
+                <a href="?status=all&priority=all&category=all&unread=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'all' && $priorityFilter == 'all' && $categoryFilter == 'all' && $unreadFilter == 'all' ? 'active' : ''; ?>">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <div class="stat-filter-number"><?php echo $allCount; ?></div>
@@ -451,7 +555,7 @@ $closedCount = count_reports($conn, "closed");
                 </a>
             </div>
             <div class="col-md-2 col-6">
-                <a href="?status=new&priority=all&category=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'new' ? 'active' : ''; ?>">
+                <a href="?status=new&priority=all&category=all&unread=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'new' ? 'active' : ''; ?>">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <div class="stat-filter-number" style="color: #3b82f6;"><?php echo $newCount; ?></div>
@@ -462,7 +566,7 @@ $closedCount = count_reports($conn, "closed");
                 </a>
             </div>
             <div class="col-md-2 col-6">
-                <a href="?status=investigating&priority=all&category=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'investigating' ? 'active' : ''; ?>">
+                <a href="?status=investigating&priority=all&category=all&unread=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'investigating' ? 'active' : ''; ?>">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <div class="stat-filter-number" style="color: #f59e0b;"><?php echo $investigatingCount; ?></div>
@@ -473,7 +577,7 @@ $closedCount = count_reports($conn, "closed");
                 </a>
             </div>
             <div class="col-md-2 col-6">
-                <a href="?status=resolved&priority=all&category=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'resolved' ? 'active' : ''; ?>">
+                <a href="?status=resolved&priority=all&category=all&unread=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'resolved' ? 'active' : ''; ?>">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <div class="stat-filter-number" style="color: #10b981;"><?php echo $resolvedCount; ?></div>
@@ -484,7 +588,7 @@ $closedCount = count_reports($conn, "closed");
                 </a>
             </div>
             <div class="col-md-2 col-6">
-                <a href="?status=closed&priority=all&category=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'closed' ? 'active' : ''; ?>">
+                <a href="?status=closed&priority=all&category=all&unread=all&search=<?php echo urlencode($searchQuery); ?>" class="stat-filter-card <?php echo $statusFilter == 'closed' ? 'active' : ''; ?>">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <div class="stat-filter-number" style="color: #6b7280;"><?php echo $closedCount; ?></div>
@@ -509,42 +613,51 @@ $closedCount = count_reports($conn, "closed");
             </div>
         </div>
         
+       
+        
         <!-- Reports Table -->
         <div class="glass-card">
             <!-- Filter Bar -->
+                        <!-- Ultra Compact Filter Bar -->
             <div class="filter-bar">
-                <form method="GET" action="" class="row g-3">
-                    <div class="col-md-3">
+                <form method="GET" action="" class="row g-2">
+                    <div class="col-md-3 col-6">
                         <select name="priority" class="form-select-glass w-100" onchange="this.form.submit()">
-                            <option value="all" <?php echo $priorityFilter == 'all' ? 'selected' : ''; ?>>All Priorities</option>
-                            <option value="low" <?php echo $priorityFilter == 'low' ? 'selected' : ''; ?>>Low Priority</option>
-                            <option value="medium" <?php echo $priorityFilter == 'medium' ? 'selected' : ''; ?>>Medium Priority</option>
-                            <option value="high" <?php echo $priorityFilter == 'high' ? 'selected' : ''; ?>>High Priority</option>
-                            <option value="critical" <?php echo $priorityFilter == 'critical' ? 'selected' : ''; ?>>Critical Priority</option>
+                            <option value="all" <?php echo $priorityFilter == 'all' ? 'selected' : ''; ?>>📊 Priority: All</option>
+                            <option value="low" <?php echo $priorityFilter == 'low' ? 'selected' : ''; ?>>🟢 Low</option>
+                            <option value="medium" <?php echo $priorityFilter == 'medium' ? 'selected' : ''; ?>>🔵 Medium</option>
+                            <option value="high" <?php echo $priorityFilter == 'high' ? 'selected' : ''; ?>>🟠 High</option>
+                            <option value="critical" <?php echo $priorityFilter == 'critical' ? 'selected' : ''; ?>>🔴 Critical</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-3 col-6">
                         <select name="category" class="form-select-glass w-100" onchange="this.form.submit()">
-                            <option value="all" <?php echo $categoryFilter == 'all' ? 'selected' : ''; ?>>All Categories</option>
+                            <option value="all" <?php echo $categoryFilter == 'all' ? 'selected' : ''; ?>>📁 Category: All</option>
                             <?php foreach ($categories as $category): ?>
                             <option value="<?php echo htmlspecialchars($category['name']); ?>" <?php echo $categoryFilter == $category['name'] ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($category['name']); ?>
+                                📄 <?php echo htmlspecialchars(substr($category['name'], 0, 20)); ?>
                             </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-2 col-6">
+                        <select name="unread" class="form-select-glass w-100" onchange="this.form.submit()">
+                            <option value="all" <?php echo $unreadFilter == 'all' ? 'selected' : ''; ?>>💬 Messages: All</option>
+                            <option value="with_unread" <?php echo $unreadFilter == 'with_unread' ? 'selected' : ''; ?>>🔴 Unread (<?php echo $unreadReportsCount; ?>)</option>
+                            <option value="without_unread" <?php echo $unreadFilter == 'without_unread' ? 'selected' : ''; ?>>✅ Read</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 col-6">
                         <div class="input-group">
                             <input type="text" name="search" class="form-control-glass w-100" 
-                                   placeholder="Search by tracking code or ID..." 
-                                   value="<?php echo htmlspecialchars($searchQuery); ?>"
-                                   style="border-radius: 12px;">
+                                   placeholder="🔍 Search tracking code or ID..." 
+                                   value="<?php echo htmlspecialchars($searchQuery); ?>">
                         </div>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-12 mt-2">
                         <input type="hidden" name="status" value="<?php echo htmlspecialchars($statusFilter); ?>">
-                        <button type="submit" class="btn-primary-glass w-100">
-                            <i class="fas fa-search"></i> Search
+                        <button type="submit" class="btn-primary-glass w-100 py-2">
+                            <i class="fas fa-filter me-2"></i> Apply Filters
                         </button>
                     </div>
                 </form>
@@ -574,13 +687,23 @@ $closedCount = count_reports($conn, "closed");
                             </td>
                         </tr>
                         <?php else: ?>
-                        <?php foreach ($reports as $report): ?>
-                        <tr>
+                        <?php foreach ($reports as $report): 
+                            $unreadCount = getReportUnreadCount($conn, $report['id']);
+                            $rowClass = $unreadCount > 0 ? 'has-unread' : '';
+                        ?>
+                        <tr class="<?php echo $rowClass; ?>">
                             <td><code>#<?php echo $report['id']; ?></code></td>
                             <td class="tracking-code"><code><?php echo htmlspecialchars($report['tracking_code']); ?></code></td>
                             <td><?php echo htmlspecialchars($report['category_name']); ?></td>
                             <td><span class="priority-badge priority-<?php echo $report['priority']; ?>"><?php echo ucfirst($report['priority']); ?></span></td>
-                            <td><span class="status-badge status-<?php echo $report['status']; ?>"><?php echo ucfirst($report['status']); ?></span></td>
+                            <td>
+                                <span class="status-badge status-<?php echo $report['status']; ?>"><?php echo ucfirst($report['status']); ?></span>
+                                <?php if ($unreadCount > 0): ?>
+                                <span class="unread-message-badge" title="<?php echo $unreadCount; ?> new message<?php echo $unreadCount > 1 ? 's' : ''; ?>">
+                                    <i class="fas fa-comment-dots me-1"></i><?php echo $unreadCount; ?>
+                                </span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <span class="visibility-badge visibility-<?php echo $report['visibility']; ?>">
                                     <i class="fas <?php echo $report['visibility'] == 'public' ? 'fa-globe' : 'fa-lock'; ?> me-1"></i>
@@ -612,7 +735,7 @@ $closedCount = count_reports($conn, "closed");
                 <nav>
                     <ul class="pagination mb-0">
                         <li class="page-item <?php echo $currentPage <= 1 ? 'disabled' : ''; ?>">
-                            <a class="page-link" href="?page=<?php echo $currentPage - 1; ?>&status=<?php echo urlencode($statusFilter); ?>&priority=<?php echo urlencode($priorityFilter); ?>&category=<?php echo urlencode($categoryFilter); ?>&search=<?php echo urlencode($searchQuery); ?>">
+                            <a class="page-link" href="?page=<?php echo $currentPage - 1; ?>&status=<?php echo urlencode($statusFilter); ?>&priority=<?php echo urlencode($priorityFilter); ?>&category=<?php echo urlencode($categoryFilter); ?>&unread=<?php echo urlencode($unreadFilter); ?>&search=<?php echo urlencode($searchQuery); ?>">
                                 <i class="fas fa-chevron-left"></i>
                             </a>
                         </li>
@@ -622,13 +745,13 @@ $closedCount = count_reports($conn, "closed");
                         for ($i = $startPage; $i <= $endPage; $i++): 
                         ?>
                         <li class="page-item <?php echo $i == $currentPage ? 'active' : ''; ?>">
-                            <a class="page-link" href="?page=<?php echo $i; ?>&status=<?php echo urlencode($statusFilter); ?>&priority=<?php echo urlencode($priorityFilter); ?>&category=<?php echo urlencode($categoryFilter); ?>&search=<?php echo urlencode($searchQuery); ?>">
+                            <a class="page-link" href="?page=<?php echo $i; ?>&status=<?php echo urlencode($statusFilter); ?>&priority=<?php echo urlencode($priorityFilter); ?>&category=<?php echo urlencode($categoryFilter); ?>&unread=<?php echo urlencode($unreadFilter); ?>&search=<?php echo urlencode($searchQuery); ?>">
                                 <?php echo $i; ?>
                             </a>
                         </li>
                         <?php endfor; ?>
                         <li class="page-item <?php echo $currentPage >= $totalPages ? 'disabled' : ''; ?>">
-                            <a class="page-link" href="?page=<?php echo $currentPage + 1; ?>&status=<?php echo urlencode($statusFilter); ?>&priority=<?php echo urlencode($priorityFilter); ?>&category=<?php echo urlencode($categoryFilter); ?>&search=<?php echo urlencode($searchQuery); ?>">
+                            <a class="page-link" href="?page=<?php echo $currentPage + 1; ?>&status=<?php echo urlencode($statusFilter); ?>&priority=<?php echo urlencode($priorityFilter); ?>&category=<?php echo urlencode($categoryFilter); ?>&unread=<?php echo urlencode($unreadFilter); ?>&search=<?php echo urlencode($searchQuery); ?>">
                                 <i class="fas fa-chevron-right"></i>
                             </a>
                         </li>
@@ -643,10 +766,17 @@ $closedCount = count_reports($conn, "closed");
     <script src="inc/background.js"></script>
     <script src="inc/sidebar.js"></script>
     <script>
-        
         // Console security notice
         console.log('%c⚠️ ADMIN REPORTS - Authorized Access Only ⚠️', 'color: #ef4444; font-size: 12px; font-weight: bold;');
         console.log('%c' + new Date().toLocaleString(), 'color: #8b92b0; font-size: 10px;');
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var sidebarItems = document.querySelectorAll('.sidebar-nav li');
+            if (sidebarItems[1]) {
+                sidebarItems[1].classList.add('active');
+            }
+        });
     </script>
 </body>
 </html>

@@ -128,6 +128,25 @@ try {
     // Store tracking code in session for display on success page
     $_SESSION['last_tracking_code'] = $trackingCode;
     $_SESSION['last_report_success'] = true;
+
+    $stmt = $conn->prepare("SELECT email, name FROM users WHERE role IN ('admin', 'super_admin') AND is_active = 1");
+$stmt->execute();
+$admins = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Get category name for email
+$categoryName = getCategoryName($conn, $categoryId);
+
+// Send email to all admins
+foreach ($admins as $admin) {
+    sendNewReportEmail(
+        $admin['email'],
+        $admin['name'],
+        $reportId,
+        $trackingCode,
+        $categoryName,
+        $priority
+    );
+}
     
     // Redirect to success page
     header('Location: ../report-success.php');

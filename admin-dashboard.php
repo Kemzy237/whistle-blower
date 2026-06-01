@@ -18,13 +18,9 @@ $adminRole = $_SESSION['admin_role'] ?? 'admin';
 
 // Get statistics
 $totalReports = count_all_reports($conn);
-
 $newReports = count_reports($conn, "new");
-
 $investigatingReports = count_reports($conn, "investigating");
-
 $resolvedReports = count_reports($conn, "resolved");
-
 $closedReports = count_reports($conn, "closed");
 
 // Get priority distribution
@@ -98,6 +94,18 @@ $weeklyActivity = get_weekly_activity($conn);
             margin-bottom: 30px;
             border: 1px solid rgba(255, 255, 255, 0.05);
             transition: all 0.3s ease;
+            animation: slideInDown 0.6s ease-out;
+        }
+        
+        @keyframes slideInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .header-section:hover {
@@ -142,7 +150,23 @@ $weeklyActivity = get_weekly_activity($conn);
             transition: all 0.3s ease;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
             height: 100%;
+            animation: fadeInUp 0.6s ease-out forwards;
+            opacity: 0;
         }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .glass-card:nth-child(1) { animation-delay: 0.1s; }
+        .glass-card:nth-child(2) { animation-delay: 0.2s; }
         
         .glass-card:hover {
             transform: translateY(-2px);
@@ -160,7 +184,25 @@ $weeklyActivity = get_weekly_activity($conn);
             border: 1px solid rgba(79, 70, 229, 0.3);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
             height: 100%;
+            animation: scaleIn 0.5s ease-out forwards;
+            opacity: 0;
         }
+        
+        @keyframes scaleIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        .stat-card:nth-child(1) { animation-delay: 0.1s; }
+        .stat-card:nth-child(2) { animation-delay: 0.2s; }
+        .stat-card:nth-child(3) { animation-delay: 0.3s; }
+        .stat-card:nth-child(4) { animation-delay: 0.4s; }
         
         .stat-card:hover {
             transform: translateY(-4px);
@@ -271,6 +313,21 @@ $weeklyActivity = get_weekly_activity($conn);
             font-size: 0.8rem;
         }
         
+        /* Chart animation keyframes */
+        @keyframes chartPop {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
         /* Responsive Design */
         @media (max-width: 992px) {
             .sidebar {
@@ -351,27 +408,6 @@ $weeklyActivity = get_weekly_activity($conn);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             padding: 15px 20px;
         }
-        
-        /* Animation for stats */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .stat-card, .glass-card {
-            animation: fadeInUp 0.5s ease-out forwards;
-        }
-        
-        .stat-card:nth-child(1) { animation-delay: 0.1s; }
-        .stat-card:nth-child(2) { animation-delay: 0.2s; }
-        .stat-card:nth-child(3) { animation-delay: 0.3s; }
-        .stat-card:nth-child(4) { animation-delay: 0.4s; }
     </style>
 </head>
 <body>
@@ -383,7 +419,7 @@ $weeklyActivity = get_weekly_activity($conn);
     
     <!-- Main Content -->
     <div class="main-content" id="mainContent">
-        <!-- Enhanced Header Section with header class -->
+        <!-- Enhanced Header Section -->
         <div class="header-section header">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div class="welcome-text">
@@ -530,7 +566,7 @@ $weeklyActivity = get_weekly_activity($conn);
         <!-- Recent Reports Widget -->
         <div class="row g-4">
             <div class="col-12">
-                <div class="glass-card">
+                <div class="glass-card" style="animation-delay: 0.5s;">
                     <div class="p-3 border-bottom border-white border-opacity-10 d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <h5 class="fw-bold mb-0">
                             <i class="fas fa-history me-2" style="color: #4f46e5;"></i>Recent Activity
@@ -586,122 +622,161 @@ $weeklyActivity = get_weekly_activity($conn);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="inc/background.js"></script>
     <script src="inc/sidebar.js"></script>
-    <script>       
-        // Status Chart (Doughnut)
-        const statusCtx = document.getElementById('statusChart').getContext('2d');
-        new Chart(statusCtx, {
-            type: 'doughnut',
-            data: {
+    <script>
+        // Helper function to create animated charts
+        function createAnimatedChart(ctx, type, data, options, animationDelay = 500) {
+            return new Chart(ctx, {
+                type: type,
+                data: data,
+                options: {
+                    ...options,
+                    animation: {
+                        duration: 1500,
+                        easing: 'easeOutQuart',
+                        delay: animationDelay
+                    },
+                    transitions: {
+                        show: {
+                            animations: {
+                                scale: {
+                                    from: 0,
+                                    to: 1,
+                                    duration: 1000,
+                                    easing: 'easeOutElastic'
+                                }
+                            }
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: true
+                }
+            });
+        }
+        
+        // Wait for page load to ensure canvas elements are ready
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            // Status Chart (Doughnut)
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            createAnimatedChart(statusCtx, 'doughnut', {
                 labels: ['New', 'Investigating', 'Resolved', 'Closed'],
                 datasets: [{
                     data: [<?php echo $newReports; ?>, <?php echo $investigatingReports; ?>, <?php echo $resolvedReports; ?>, <?php echo $closedReports; ?>],
                     backgroundColor: ['#3b82f6', '#f59e0b', '#10b981', '#6b7280'],
                     borderWidth: 0,
-                    hoverOffset: 10
+                    hoverOffset: 10,
+                    hoverBorderWidth: 2,
+                    hoverBorderColor: '#fff'
                 }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
+            }, {
                 plugins: {
                     legend: {
                         position: 'bottom',
                         labels: {
                             color: '#e0e0e0',
-                            font: { size: 11 }
+                            font: { size: 11 },
+                            usePointStyle: true,
+                            pointStyle: 'circle'
                         }
                     },
                     tooltip: {
                         backgroundColor: 'rgba(0,0,0,0.8)',
                         titleColor: '#fff',
-                        bodyColor: '#e0e0e0'
+                        bodyColor: '#e0e0e0',
+                        padding: 10,
+                        cornerRadius: 8
                     }
+                },
+                cutout: '60%'
+            }, 100);
+            
+            // Priority Chart (Bar)
+            const priorityData = <?php 
+                $priorityMap = ['low' => 0, 'medium' => 0, 'high' => 0, 'critical' => 0];
+                foreach ($priorityStats as $stat) {
+                    $priorityMap[$stat['priority']] = $stat['count'];
                 }
-            }
-        });
-        
-        // Priority Chart (Bar)
-        const priorityData = <?php 
-            $priorityMap = ['low' => 0, 'medium' => 0, 'high' => 0, 'critical' => 0];
-            foreach ($priorityStats as $stat) {
-                $priorityMap[$stat['priority']] = $stat['count'];
-            }
-            echo json_encode(array_values($priorityMap));
-        ?>;
-        
-        const priorityCtx = document.getElementById('priorityChart').getContext('2d');
-        new Chart(priorityCtx, {
-            type: 'bar',
-            data: {
+                echo json_encode(array_values($priorityMap));
+            ?>;
+            
+            const priorityCtx = document.getElementById('priorityChart').getContext('2d');
+            createAnimatedChart(priorityCtx, 'bar', {
                 labels: ['Low', 'Medium', 'High', 'Critical'],
                 datasets: [{
                     label: 'Number of Reports',
                     data: priorityData,
                     backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
                     borderRadius: 8,
-                    borderSkipped: false
+                    borderSkipped: false,
+                    hoverBackgroundColor: ['#059669', '#2563eb', '#d97706', '#dc2626'],
+                    barPercentage: 0.7,
+                    categoryPercentage: 0.8
                 }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
+            }, {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
                         backgroundColor: 'rgba(0,0,0,0.8)',
                         titleColor: '#fff',
-                        bodyColor: '#e0e0e0'
+                        bodyColor: '#e0e0e0',
+                        callbacks: {
+                            label: function(context) {
+                                return `Reports: ${context.raw}`;
+                            }
+                        }
                     }
                 },
                 scales: {
                     y: {
                         beginAtZero: true,
                         grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: { color: '#e0e0e0', stepSize: 1 }
+                        ticks: { color: '#e0e0e0', stepSize: 1 },
+                        title: {
+                            display: true,
+                            text: 'Number of Reports',
+                            color: '#8b92b0'
+                        }
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { color: '#e0e0e0' }
+                        ticks: { color: '#e0e0e0', font: { weight: 'bold' } }
                     }
                 }
-            }
-        });
-        
-        // Monthly Trends Chart (Line)
-        const trendsLabels = <?php 
-            $labels = array_map(function($item) { return $item['month']; }, $monthlyTrends);
-            echo json_encode($labels);
-        ?>;
-        const trendsData = <?php 
-            $data = array_map(function($item) { return $item['count']; }, $monthlyTrends);
-            echo json_encode($data);
-        ?>;
-        
-        const trendsCtx = document.getElementById('trendsChart').getContext('2d');
-        new Chart(trendsCtx, {
-            type: 'line',
-            data: {
+            }, 200);
+            
+            // Monthly Trends Chart (Line)
+            const trendsLabels = <?php 
+                $labels = array_map(function($item) { return $item['month']; }, $monthlyTrends);
+                echo json_encode($labels);
+            ?>;
+            const trendsData = <?php 
+                $data = array_map(function($item) { return $item['count']; }, $monthlyTrends);
+                echo json_encode($data);
+            ?>;
+            
+            const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+            createAnimatedChart(trendsCtx, 'line', {
                 labels: trendsLabels,
                 datasets: [{
                     label: 'Reports Submitted',
                     data: trendsData,
                     borderColor: '#4f46e5',
                     backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                    borderWidth: 2,
+                    borderWidth: 3,
                     fill: true,
                     tension: 0.4,
                     pointBackgroundColor: '#4f46e5',
                     pointBorderColor: '#fff',
-                    pointRadius: 4,
-                    pointHoverRadius: 6
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: '#4f46e5'
                 }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
+            }, {
                 plugins: {
                     legend: {
-                        labels: { color: '#e0e0e0' }
+                        labels: { color: '#e0e0e0', usePointStyle: true }
                     },
                     tooltip: {
                         backgroundColor: 'rgba(0,0,0,0.8)',
@@ -713,72 +788,91 @@ $weeklyActivity = get_weekly_activity($conn);
                     y: {
                         beginAtZero: true,
                         grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: { color: '#e0e0e0', stepSize: 1 }
+                        ticks: { color: '#e0e0e0', stepSize: 1 },
+                        title: {
+                            display: true,
+                            text: 'Number of Reports',
+                            color: '#8b92b0'
+                        }
                     },
                     x: {
                         grid: { display: false },
                         ticks: { color: '#e0e0e0' }
                     }
+                },
+                elements: {
+                    line: {
+                        tension: 0.4
+                    }
                 }
-            }
-        });
-        
-        // Category Chart (Horizontal Bar)
-        const categoryLabels = <?php 
-            $labels = array_map(function($item) { return $item['name']; }, $categoryStats);
-            echo json_encode($labels);
-        ?>;
-        const categoryData = <?php 
-            $data = array_map(function($item) { return $item['count']; }, $categoryStats);
-            echo json_encode($data);
-        ?>;
-        
-        const categoryCtx = document.getElementById('categoryChart').getContext('2d');
-        new Chart(categoryCtx, {
-            type: 'bar',
-            data: {
+            }, 300);
+            
+            // Category Chart (Horizontal Bar)
+            const categoryLabels = <?php 
+                $labels = array_map(function($item) { return $item['name']; }, $categoryStats);
+                echo json_encode($labels);
+            ?>;
+            const categoryData = <?php 
+                $data = array_map(function($item) { return $item['count']; }, $categoryStats);
+                echo json_encode($data);
+            ?>;
+            
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+            createAnimatedChart(categoryCtx, 'bar', {
                 labels: categoryLabels,
                 datasets: [{
                     label: 'Reports',
                     data: categoryData,
-                    backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                    backgroundColor: 'rgba(79, 70, 229, 0.8)',
                     borderRadius: 8,
-                    borderSkipped: false
+                    borderSkipped: false,
+                    hoverBackgroundColor: 'rgba(79, 70, 229, 1)'
                 }]
-            },
-            options: {
+            }, {
                 indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: true,
                 plugins: {
                     legend: { display: false },
                     tooltip: {
                         backgroundColor: 'rgba(0,0,0,0.8)',
                         titleColor: '#fff',
-                        bodyColor: '#e0e0e0'
+                        bodyColor: '#e0e0e0',
+                        callbacks: {
+                            label: function(context) {
+                                return `Reports: ${context.raw}`;
+                            }
+                        }
                     }
                 },
                 scales: {
                     x: {
                         beginAtZero: true,
                         grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: { color: '#e0e0e0', stepSize: 1 }
+                        ticks: { color: '#e0e0e0', stepSize: 1 },
+                        title: {
+                            display: true,
+                            text: 'Number of Reports',
+                            color: '#8b92b0'
+                        }
                     },
                     y: {
                         grid: { display: false },
-                        ticks: { color: '#e0e0e0' }
+                        ticks: { color: '#e0e0e0', font: { size: 11 } }
                     }
                 }
-            }
+            }, 400);
         });
         
         // Console security notice
         console.log('%c⚠️ ADMIN PANEL - Authorized Access Only ⚠️', 'color: #ef4444; font-size: 12px; font-weight: bold;');
         console.log('%c' + new Date().toLocaleString(), 'color: #8b92b0; font-size: 10px;');
     </script>
-    <script type="text/javascript">
-        var active = document.querySelector("#sidebar-nav li:nth-child(1)");
-        active.classList.add("active");
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var sidebarItems = document.querySelectorAll('.sidebar-nav li');
+            if (sidebarItems[0]) {
+                sidebarItems[0].classList.add('active');
+            }
+        });
     </script>
 </body>
 </html>

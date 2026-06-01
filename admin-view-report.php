@@ -146,6 +146,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_evidence'])) {
     
     $successMessage = "Evidence visibility updated successfully!";
 }
+
+// Mark all whistleblower messages as read for this report
+markReportMessagesAsRead($conn, $reportId);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -726,10 +729,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_evidence'])) {
                         Tracking Code: <code class="tracking-code"><?php echo htmlspecialchars($report['tracking_code']); ?></code>
                     </p>
                 </div>
-                <div class="role-badge">
-                    <i class="fas fa-user-shield me-1"></i>
-                    Role: <?php echo ucfirst($adminRole); ?>
-                </div>
             </div>
         </div>
         
@@ -1005,6 +1004,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_evidence'])) {
         
         // Console security notice
         console.log('%c⚠️ ADMIN VIEW REPORT - Authorized Access Only ⚠️', 'color: #ef4444; font-size: 12px; font-weight: bold;');
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var sidebarItems = document.querySelectorAll('.sidebar-nav li');
+            if (sidebarItems[1]) {
+                sidebarItems[1].classList.add('active');
+            }
+        });
     </script>
 </body>
 </html>

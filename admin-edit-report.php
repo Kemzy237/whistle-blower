@@ -707,5 +707,13 @@ $evidences = fetch_report_evidence($conn, $reportId);
         console.log('%c⚠️ ADMIN EDIT REPORT - Authorized Access Only ⚠️', 'color: #ef4444; font-size: 12px; font-weight: bold;');
         console.log('%c' + new Date().toLocaleString(), 'color: #8b92b0; font-size: 10px;');
     </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var sidebarItems = document.querySelectorAll('.sidebar-nav li');
+            if (sidebarItems[1]) {
+                sidebarItems[1].classList.add('active');
+            }
+        });
+    </script>
 </body>
 </html>

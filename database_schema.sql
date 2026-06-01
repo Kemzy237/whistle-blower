@@ -374,3 +374,18 @@ VALUES (
 
 -- To create additional admin users with a specific password, use:
 -- Password hash generated with password_hash('YourPassword123', PASSWORD_DEFAULT)
+
+-- Create user_settings table for notification preferences
+CREATE TABLE IF NOT EXISTS user_settings (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    notification_enabled BOOLEAN DEFAULT TRUE,
+    push_notification_token TEXT NULL,
+    device_type ENUM('web', 'android', 'ios') DEFAULT 'web',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id),
+    UNIQUE KEY uk_user_device (user_id, device_type)
+);

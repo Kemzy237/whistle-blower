@@ -8,6 +8,7 @@ require_once __DIR__ . '/model/report.php';
 
 $reportId = isset($_POST['report_id']) ? (int)$_POST['report_id'] : 0;
 $evidenceId = isset($_POST['evidence_id']) ? (int)$_POST['evidence_id'] : 0;
+$unlimited = isset($_POST['unlimited']) ? true : false;
 
 if (!$reportId || !$evidenceId) {
     echo json_encode(['success' => false, 'error' => 'Report ID and Evidence ID required']);
@@ -29,13 +30,19 @@ if (!$report) {
     exit;
 }
 
-// Verify evidence exists and is public
-$stmt = $conn->prepare("
+// Verify evidence exists and is public (remove max_views restriction for unlimited access)
+$sql = "
     SELECT id FROM evidences 
     WHERE id = ? AND report_id = ? AND is_public = TRUE
     AND (expires_at IS NULL OR expires_at > NOW())
-    AND (max_views IS NULL OR view_count < max_views)
-");
+";
+
+// Only check max_views if NOT unlimited
+if (!$unlimited) {
+    $sql .= " AND (max_views IS NULL OR view_count < max_views)";
+}
+
+$stmt = $conn->prepare($sql);
 $stmt->execute([$evidenceId, $reportId]);
 $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -44,15 +51,40 @@ if (!$evidence) {
     exit;
 }
 
-// Create access token
-$token = createAccessToken($conn, $reportId, $evidenceId, 'view_evidence');
-
-if ($token) {
-    $_SESSION['public_access_token'] = $token;
-    echo json_encode([
-        'success' => true,
-        'view_url' => "view-public-evidence.php?token=$token"
-    ]);
+// Create access token with appropriate expiry
+if ($unlimited) {
+    // Create a token that doesn't expire (or expires far in future)
+    $token = bin2hex(random_bytes(32));
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+10 years')); // 10 years expiry for unlimited access
+    
+    $stmt = $conn->prepare("
+        INSERT INTO access_tokens (report_id, token, type, expires_at, created_at)
+        VALUES (?, ?, 'view_evidence', ?, NOW())
+    ");
+    
+    if ($stmt->execute([$reportId, $token, $expiresAt])) {
+        $_SESSION['public_access_token'] = $token;
+        $_SESSION['token_evidence_id'] = $evidenceId;
+        echo json_encode([
+            'success' => true,
+            'view_url' => "view-public-evidence.php?token=$token",
+            'unlimited' => true
+        ]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Failed to create unlimited access token']);
+    }
 } else {
-    echo json_encode(['success' => false, 'error' => 'Failed to create access token']);
+    // Regular token with 1 hour expiry
+    $token = createAccessToken($conn, $reportId, $evidenceId, 'view_evidence');
+    
+    if ($token) {
+        $_SESSION['public_access_token'] = $token;
+        echo json_encode([
+            'success' => true,
+            'view_url' => "view-public-evidence.php?token=$token",
+            'unlimited' => false
+        ]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Failed to create access token']);
+    }
 }
