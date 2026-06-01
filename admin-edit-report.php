@@ -185,6 +185,7 @@ $evidences = fetch_report_evidence($conn, $reportId);
     
     <link rel="stylesheet" href="inc/background.css">
     <link rel="stylesheet" href="inc/sidebar.css">
+    <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/fortawesome/Font-Awesome/6.x/svgs/solid/shield-halved.svg">
     
     <style>
         * {
