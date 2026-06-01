@@ -791,7 +791,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="reportForm" action="app/submit-report.php" method="POST" enctype="multipart/form-data" target="_blank">
+                <form id="reportForm" action="app/submit-report.php" method="POST" enctype="multipart/form-data" target="_blank" autocomplete="off">
                     <div class="mb-3">
                         <label class="form-label">Category</label>
                         <select class="form-select form-select-glass" name="category" required>
@@ -853,7 +853,7 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="trackForm" action="app/track-report.php" method="POST">
+                    <form id="trackForm" action="app/track-report.php" method="POST" autocomplete="off">
                         <div class="mb-3">
                             <label class="form-label">Tracking Code</label>
                             <input type="text" name="tracking_code" class="form-control form-control-glass" placeholder="Enter your tracking code" required>
@@ -864,10 +864,6 @@
                         </button>
                     </form>
                     <hr>
-                    <div class="text-center">
-                        <p class="small text-muted-custom mb-0">Lost your tracking code?</p>
-                        <a href="#" class="small" style="color: #4f46e5;">Contact support with your anonymous session ID</a>
-                    </div>
                 </div>
             </div>
         </div>

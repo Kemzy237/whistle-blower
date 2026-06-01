@@ -234,7 +234,7 @@ if (isset($_GET['state']) && $_GET['state'] === "success") {
                         </div>
                         <?php endif; ?>
                         
-                        <form method="POST" action="app/admin-login.php">
+                        <form method="POST" action="app/admin-login.php" autocomplete="off">
                             <div class="mb-3">
                                 <label class="form-label small fw-semibold">Email Address</label>
                                 <div class="input-group">
