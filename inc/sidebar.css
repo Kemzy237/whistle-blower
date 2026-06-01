@@ -1,0 +1,120 @@
+ /* Mobile Menu Button */
+ 
+ .mobile-menu-btn {
+     position: fixed;
+     top: 15px;
+     left: 15px;
+     z-index: 1001;
+     background: rgba(79, 70, 229, 0.2);
+     border: 1px solid rgba(79, 70, 229, 0.3);
+     border-radius: 10px;
+     padding: 10px 12px;
+     cursor: pointer;
+     display: none;
+     backdrop-filter: blur(10px);
+     color: white;
+     transition: all 0.3s ease;
+ }
+ 
+ .mobile-menu-btn:hover {
+     background: rgba(79, 70, 229, 0.4);
+     border-color: rgba(79, 70, 229, 0.6);
+ }
+ 
+ .mobile-menu-btn i {
+     font-size: 1.2rem;
+ }
+ /* Sidebar */
+ 
+ .sidebar {
+     position: fixed;
+     left: 0;
+     top: 0;
+     height: 100vh;
+     width: 260px;
+     border-right: 1px solid rgba(255, 255, 255, 0.05);
+     padding: 20px 0;
+     background: rgba(20, 24, 36, 0.95);
+     backdrop-filter: blur(12px);
+     transition: transform 0.3s ease;
+     z-index: 1000;
+     overflow-y: auto;
+ }
+ 
+ .sidebar.closed {
+     transform: translateX(-100%);
+ }
+ 
+ .sidebar-overlay {
+     position: fixed;
+     top: 0;
+     left: 0;
+     width: 100%;
+     height: 100%;
+     background: rgba(0, 0, 0, 0.7);
+     z-index: 999;
+     display: none;
+ }
+ 
+ .sidebar-overlay.show {
+     display: block;
+ }
+ 
+ .sidebar-brand {
+     padding: 0 20px 20px;
+     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+     margin-bottom: 20px;
+ }
+ 
+ .sidebar-brand h4 {
+     font-size: 1.3rem;
+     font-weight: 700;
+ }
+ 
+ .sidebar-nav {
+     list-style: none;
+     padding: 0;
+     margin: 0;
+ }
+ 
+ .sidebar-nav li {
+     margin-bottom: 5px;
+ }
+ 
+ .sidebar-nav li a {
+     display: flex;
+     align-items: center;
+     padding: 12px 20px;
+     color: #e0e0e0;
+     text-decoration: none;
+     transition: all 0.2s ease;
+     border-left: 3px solid transparent;
+ }
+ 
+ .sidebar-nav li a:hover,
+ .sidebar-nav li a.active {
+     background: rgba(79, 70, 229, 0.15);
+     border-left-color: #4f46e5;
+     color: white;
+ }
+ 
+ .active {
+     background: rgba(79, 70, 229, 0.15);
+     border-left-color: #4f46e5;
+     color: white;
+ }
+ 
+ .sidebar-nav li a i {
+     width: 24px;
+     margin-right: 12px;
+     font-size: 1.1rem;
+ }
+ 
+ @media (max-width: 992px) {
+     .sidebar {
+         transform: translateX(-100%);
+     }
+     .sidebar.mobile-open {
+         transform: translateX(0);
+     }
+ }

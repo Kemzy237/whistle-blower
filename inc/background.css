@@ -1,0 +1,197 @@
+.whistleguard-bg-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    z-index: 0;
+    pointer-events: none;
+}
+
+
+/* Individual floating shapes - glassmorphic blobs */
+
+.whistleguard-shape {
+    position: absolute;
+    background: rgba(79, 70, 229, 0.08);
+    border-radius: 50%;
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    will-change: transform;
+}
+
+
+/* Shape variations with different sizes and positions */
+
+.whistleguard-shape-1 {
+    width: 300px;
+    height: 300px;
+    top: -100px;
+    left: -100px;
+    background: radial-gradient(circle, rgba(79, 70, 229, 0.15), rgba(79, 70, 229, 0.05));
+    animation: whistleguard-float-slow 25s infinite ease-in-out;
+}
+
+.whistleguard-shape-2 {
+    width: 200px;
+    height: 200px;
+    bottom: 10%;
+    right: -50px;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.12), rgba(124, 58, 237, 0.04));
+    animation: whistleguard-float-around 20s infinite ease-in-out 2s;
+}
+
+.whistleguard-shape-3 {
+    width: 150px;
+    height: 150px;
+    top: 40%;
+    right: 20%;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.03));
+    animation: whistleguard-float-around 22s infinite ease-in-out 5s;
+}
+
+.whistleguard-shape-4 {
+    width: 400px;
+    height: 400px;
+    bottom: -150px;
+    left: -100px;
+    background: radial-gradient(circle, rgba(79, 70, 229, 0.06), rgba(79, 70, 229, 0.02));
+    border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+    animation: whistleguard-float-slow 28s infinite ease-in-out 1s;
+}
+
+.whistleguard-shape-5 {
+    width: 120px;
+    height: 120px;
+    top: 20%;
+    left: 15%;
+    background: rgba(139, 92, 246, 0.08);
+    border-radius: 30% 70% 50% 50% / 30% 40% 60% 70%;
+    animation: whistleguard-float-around 18s infinite ease-in-out 7s;
+}
+
+.whistleguard-shape-6 {
+    width: 250px;
+    height: 250px;
+    bottom: 30%;
+    right: 10%;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.03));
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+    animation: whistleguard-float-around 24s infinite ease-in-out 3s;
+}
+
+.whistleguard-shape-7 {
+    width: 80px;
+    height: 80px;
+    top: 70%;
+    left: 30%;
+    background: rgba(236, 72, 153, 0.06);
+    border-radius: 50%;
+    animation: whistleguard-float-around 19s infinite ease-in-out 4s;
+}
+
+.whistleguard-shape-8 {
+    width: 180px;
+    height: 180px;
+    top: 15%;
+    right: 30%;
+    background: rgba(79, 70, 229, 0.07);
+    border-radius: 40% 60% 60% 40% / 40% 50% 50% 60%;
+    animation: whistleguard-float-around 26s infinite ease-in-out 6s;
+}
+
+
+/* Particle system - tiny floating dots */
+
+.whistleguard-particle {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: rgba(79, 70, 229, 0.5);
+    border-radius: 50%;
+    animation: whistleguard-particle-float 10s infinite linear;
+    pointer-events: none;
+}
+
+
+/* Keyframes for floating animations */
+
+@keyframes whistleguard-float-around {
+    0% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+    25% {
+        transform: translate(30px, -30px) rotate(5deg);
+    }
+    50% {
+        transform: translate(-20px, 20px) rotate(-3deg);
+    }
+    75% {
+        transform: translate(20px, 30px) rotate(2deg);
+    }
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+}
+
+@keyframes whistleguard-float-slow {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+    50% {
+        transform: translate(40px, -20px) scale(1.05);
+    }
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+}
+
+@keyframes whistleguard-particle-float {
+    0% {
+        transform: translateY(100vh) rotate(0deg);
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    90% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100vh) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+
+/* Responsive adjustments - scale down shapes on smaller screens */
+
+@media (max-width: 768px) {
+    .whistleguard-shape-1,
+    .whistleguard-shape-4 {
+        width: 200px;
+        height: 200px;
+    }
+    .whistleguard-shape-2 {
+        width: 150px;
+        height: 150px;
+    }
+    .whistleguard-shape-6 {
+        width: 180px;
+        height: 180px;
+    }
+    .whistleguard-shape-8 {
+        width: 130px;
+        height: 130px;
+    }
+}
+
+
+/* Optional: dark base for body to match background (recommended but not required) */
+
+body.whistleguard-bg-ready {
+    background: #0a0e1a;
+    margin: 0;
+    padding: 0;
+}
