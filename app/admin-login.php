@@ -1,5 +1,9 @@
 <?php
 session_start();
+if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== true) {
+    header("Location: admin-login.php");
+    exit();
+}
 
 // Include database connection
 require_once '../db_connection.php';
@@ -34,7 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['admin_name'] = $user['name'];
                 $_SESSION['admin_email'] = $user['email'];
                 $_SESSION['admin_role'] = $user['role'];
-                
+
+                                
                 // Log the login attempt
                 $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
                 $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');

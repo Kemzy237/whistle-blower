@@ -3,9 +3,9 @@
 session_start();
 
 // Check if admin is logged in
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: admin-login.php');
-    exit;
+if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== true) {
+    header("Location: admin-login.php");
+    exit();
 }
 
 // Include database connection
@@ -48,11 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_general_settin
         // Log the action
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-        $stmt = $conn->prepare("
-            INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-            VALUES (?, 'settings_updated', ?, ?, ?, NOW())
-        ");
-        $stmt->execute([$adminId, $ipHash, $userAgentHash, json_encode(['settings_type' => 'general'])]);
+
+        $action = array($adminId, "settings_updated", $ipHash, $userAgentHash, json_encode(['settings_type' => 'general']));
+        log_admin_action($conn, $action);
     } else {
         $errorMessage = 'Failed to save settings. Please check folder permissions.';
     }
@@ -66,8 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_category'])) {
     if (empty($categoryName)) {
         $errorMessage = 'Category name is required.';
     } else {
-        $stmt = $conn->prepare("INSERT INTO categories (name, description, is_active, created_at) VALUES (?, ?, 1, NOW())");
-        if ($stmt->execute([$categoryName, $categoryDescription])) {
+        $data = array($categoryName, $categoryDescription);
+        if (insert_category($conn, $data)) {
             $successMessage = 'Category added successfully!';
             
             // Log the action
@@ -90,9 +88,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_category'])) {
     $categoryName = trim($_POST['category_name']);
     $categoryDescription = trim($_POST['category_description']);
     $isActive = isset($_POST['is_active']) ? 1 : 0;
-    
-    $stmt = $conn->prepare("UPDATE categories SET name = ?, description = ?, is_active = ?, updated_at = NOW() WHERE id = ?");
-    if ($stmt->execute([$categoryName, $categoryDescription, $isActive, $categoryId])) {
+
+    $data = array($categoryName, $categoryDescription, $isActive, $categoryId);
+    if (update_category($conn, $data)) {
         $successMessage = 'Category updated successfully!';
         
         // Log the action
@@ -113,15 +111,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_category'])) {
     $categoryId = (int)$_POST['category_id'];
     
     // Check if category has reports
-    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM reports WHERE category_id = ?");
-    $stmt->execute([$categoryId]);
-    $reportCount = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
+    $reportCount = count_category_reports($conn, $categoryId);
     
     if ($reportCount > 0) {
         $errorMessage = "Cannot delete category. It has $reportCount report(s) associated with it.";
     } else {
-        $stmt = $conn->prepare("DELETE FROM categories WHERE id = ?");
-        if ($stmt->execute([$categoryId])) {
+        if (delete_category($conn, $categoryId)) {
             $successMessage = 'Category deleted successfully!';
             
             // Log the action
@@ -148,20 +143,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_cleanup'])) {
         // Log the action
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-        $stmt = $conn->prepare("
-            INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, created_at)
-            VALUES (?, 'cleanup_executed', ?, ?, NOW())
-        ");
-        $stmt->execute([$adminId, $ipHash, $userAgentHash]);
+        $action = array($adminId, "cleanup_executed", $ipHash, $userAgentHash);
+        log_admin_action($conn, $action);
     } catch (PDOException $e) {
         $errorMessage = 'Cleanup failed: ' . $e->getMessage();
     }
 }
 
 // Get all categories
-$stmt = $conn->prepare("SELECT * FROM categories ORDER BY id");
-$stmt->execute();
-$categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$categories = get_ordered_categories($conn);
 
 // Load settings
 $settingsFile = __DIR__ . '/inc/settings.json';
@@ -171,29 +161,10 @@ if (file_exists($settingsFile)) {
 }
 
 // Get system statistics for info page
-$stmt = $conn->prepare("
-    SELECT 
-        COUNT(*) as total_reports,
-        COUNT(DISTINCT anonymous_session_id) as unique_whistleblowers,
-        (SELECT COUNT(*) FROM messages) as total_messages,
-        (SELECT COUNT(*) FROM evidences) as total_evidences,
-        (SELECT COUNT(*) FROM users WHERE role IN ('admin', 'super_admin')) as total_admins
-    FROM reports
-");
-$stmt->execute();
-$systemStats = $stmt->fetch(PDO::FETCH_ASSOC);
+$systemStats = get_system_stats($conn);
 
 // Get database size
-$stmt = $conn->prepare("
-    SELECT 
-        table_schema as 'database',
-        ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb
-    FROM information_schema.tables 
-    WHERE table_schema = 'whistleblower'
-    GROUP BY table_schema
-");
-$stmt->execute();
-$dbSize = $stmt->fetch(PDO::FETCH_ASSOC);
+$dbSize = get_database_size($conn);
 ?>
 <!DOCTYPE html>
 <html lang="en">

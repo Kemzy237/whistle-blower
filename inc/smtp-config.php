@@ -1,6 +1,10 @@
 <?php
 // inc/smtp-config.php
 // SMTP Configuration for Email Notifications
+if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== true) {
+    header("Location: ../admin-login.php");
+    exit();
+}
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;

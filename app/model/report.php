@@ -1,8 +1,13 @@
 <?php
+if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== true) {
+    header("Location: ../../admin-login.php");
+    exit();
+}
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 require_once __DIR__ . '/../../inc/smtp-config.php';
+// include "../../inc/smtp-config.php";
 
 // Define encryption key (must match the one in submit-report.php)
 define('ENCRYPTION_KEY', hex2bin('7a8f5c3e2d1b4a6c9e7f8d3c2b1a4f6e8d7c9a5b3e2f1c8d7a6b4f2e1c3d5a7b'));
@@ -773,4 +778,111 @@ function sendNewMessageEmail($adminEmail, $adminName, $reportId, $trackingCode, 
         error_log("Email could not be sent. Error: {$mail->ErrorInfo}");
         return false;
     }
+}
+
+function update_report($conn, $data){
+    $sql = "UPDATE reports SET category_id = ?, 
+            encrypted_description = ?, 
+            priority = ?, 
+            visibility = ?, 
+            publication_status = ?,
+            expires_at = ?,
+            updated_at = NOW()
+            WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+}
+
+function log_report_action($conn, $action) {
+    $sql = 'INSERT INTO audit_logs (report_id, admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, NOW())';
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($action);
+}
+
+ function get_file_path($conn, $data){
+    $sql = "SELECT encrypted_file_path FROM evidences WHERE id = ? AND report_id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+    $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $evidence;
+}
+
+ function delete_evidence($conn, $data){
+    $sql = "DELETE FROM evidences WHERE id = ? AND report_id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+}
+
+ function delete_report($conn, $reportId) {
+    $sql = "DELETE FROM reports WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$reportId]);
+}
+
+function log_admin_action($conn, $action) {
+    $sql = 'INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, created_at)
+    VALUES (?, ?, ?, ?, NOW())';
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($action);
+}
+
+ function insert_category($conn, $data) {
+    $sql = 'INSERT INTO categories (name, description, is_active, created_at) VALUES (?, ?, 1, NOW())';
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+}
+
+function update_category($conn, $data) {
+    $sql = 'UPDATE categories SET name = ?, description = ?, is_active = ?, updated_at = NOW() WHERE id = ?';
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+}
+
+function count_category_reports($conn, $categoryId) {
+    $sql = 'SELECT COUNT(*) as count FROM reports WHERE category_id = ?';
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$categoryId]);
+    $result = $stmt->fetchAll();
+    return $result ? $result['total'] : 0;
+}
+function delete_category($conn, $categoryId) {
+    $sql = "DELETE FROM categories WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$categoryId]);
+}
+
+function get_ordered_categories($conn) {
+    $sql = "SELECT * FROM categories ORDER BY id";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return $result;
+}
+
+function get_system_stats($conn){
+    $sql = "SELECT 
+        COUNT(*) as total_reports,
+        COUNT(DISTINCT anonymous_session_id) as unique_whistleblowers,
+        (SELECT COUNT(*) FROM messages) as total_messages,
+        (SELECT COUNT(*) FROM evidences) as total_evidences,
+        (SELECT COUNT(*) FROM users WHERE role IN ('admin', 'super_admin')) as total_admins
+    FROM reports";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $systemStats = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $systemStats;
+}
+
+function get_database_size($conn){
+    $sql = "SELECT 
+        table_schema as 'database',
+        ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb
+    FROM information_schema.tables 
+    WHERE table_schema = 'whistleblower'
+    GROUP BY table_schema";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $size = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $size;
 }

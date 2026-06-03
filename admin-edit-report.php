@@ -3,9 +3,9 @@
 session_start();
 
 // Check if admin is logged in
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: admin-login.php');
-    exit;
+if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== true) {
+    header("Location: admin-login.php");
+    exit();
 }
 
 // Include database connection and report functions
@@ -67,31 +67,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $encryptedDescription = encryptData($newDescription, ENCRYPTION_KEY);
             
             // Update report
-            $stmt = $conn->prepare("
-                UPDATE reports 
-                SET category_id = ?, 
-                    encrypted_description = ?, 
-                    priority = ?, 
-                    visibility = ?, 
-                    publication_status = ?,
-                    expires_at = ?,
-                    updated_at = NOW()
-                WHERE id = ?
-            ");
-            
-            $stmt->execute([$newCategoryId, $encryptedDescription, $newPriority, 
-                           $newVisibility, $newPublicationStatus, $newExpiresAt, $reportId]);
+            $data = array($newCategoryId, $encryptedDescription, $newPriority, $newVisibility, $newPublicationStatus, $newExpiresAt, $reportId);
+            update_report($conn, $data);
             
             // Log the action
             $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
             $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
             $metadata = json_encode(['updated_fields' => ['category', 'description', 'priority', 'visibility', 'publication_status', 'expires_at']]);
-            
-            $stmt = $conn->prepare("
-                INSERT INTO audit_logs (report_id, admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-                VALUES (?, ?, 'report_updated', ?, ?, ?, NOW())
-            ");
-            $stmt->execute([$reportId, $_SESSION['admin_id'], $ipHash, $userAgentHash, $metadata]);
+
+            $action = array($reportId, $_SESSION['admin_id'], "report_updated", $ipHash, $userAgentHash, $metadata);
+            log_report_action($conn, $action);
             
             // Refresh report data
             $report = get_report_without_catDescription($conn, $reportId);
@@ -108,31 +93,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $evidenceId = (int)$_POST['evidence_id'];
         
         // Get file path before deleting
-        $stmt = $conn->prepare("SELECT encrypted_file_path FROM evidences WHERE id = ? AND report_id = ?");
-        $stmt->execute([$evidenceId, $reportId]);
-        $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
+        $data = array($evidenceId, $reportId);
+        $evidence = get_file_path($conn, $data);
         
         if ($evidence) {
             // Delete the encrypted file
             $filePath = decryptData($evidence['encrypted_file_path'], ENCRYPTION_KEY);
             if (file_exists($filePath)) {
                 unlink($filePath);
+            }else{
+                $errorMessage = 'File does not exist';
+                exit();
             }
             
             // Delete from database
-            $stmt = $conn->prepare("DELETE FROM evidences WHERE id = ? AND report_id = ?");
-            $stmt->execute([$evidenceId, $reportId]);
+            $data = array($evidenceId, $reportId);
+            delete_evidence($conn, $data);
             
             // Log the action
             $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
             $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
             $metadata = json_encode(['evidence_id' => $evidenceId]);
             
-            $stmt = $conn->prepare("
-                INSERT INTO audit_logs (report_id, admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-                VALUES (?, ?, 'evidence_deleted', ?, ?, ?, NOW())
-            ");
-            $stmt->execute([$reportId, $_SESSION['admin_id'], $ipHash, $userAgentHash, $metadata]);
+            $data=array($reportId, $_SESSION['admin_id'], "evidence_deleted", $ipHash, $userAgentHash, $metadata);
+            log_report_action($conn, $data);
             
             $successMessage = "Evidence deleted successfully!";
         }
@@ -145,15 +129,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
         $metadata = json_encode(['report_id' => $reportId, 'tracking_code' => $report['tracking_code']]);
         
-        $stmt = $conn->prepare("
-            INSERT INTO audit_logs (report_id, admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-            VALUES (?, ?, 'report_deleted', ?, ?, ?, NOW())
-        ");
-        $stmt->execute([$reportId, $_SESSION['admin_id'], $ipHash, $userAgentHash, $metadata]);
+        $data=array($reportId, $_SESSION['admin_id'], "report_deleted", $ipHash, $userAgentHash, $metadata);
+        log_report_action($conn, $data);
         
         // Delete report (cascade will delete evidences, messages, etc.)
-        $stmt = $conn->prepare("DELETE FROM reports WHERE id = ?");
-        $stmt->execute([$reportId]);
+        delete_report($conn, $reportId);
         
         header('Location: admin-reports.php?deleted=1');
         exit;

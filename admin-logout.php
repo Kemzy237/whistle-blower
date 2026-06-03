@@ -1,19 +1,21 @@
 <?php
 // admin-logout.php
 session_start();
+if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== true) {
+    header("Location: admin-login.php");
+    exit();
+}
 
 // Log the logout action
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
     require_once 'db_connection.php';
+    require_once __DIR__.'app/model/report.php';
     
     $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
     $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-    
-    $stmt = $conn->prepare("
-        INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, created_at)
-        VALUES (?, 'admin_logout', ?, ?, NOW())
-    ");
-    $stmt->execute([$_SESSION['admin_id'] ?? null, $ipHash, $userAgentHash]);
+
+    $action = array($_SESSION['admin_id'] ?? null, "admin_logout", $ipHash, $userAgentHash);
+    log_admin_action($conn, $action);
 }
 
 // Destroy all session data
