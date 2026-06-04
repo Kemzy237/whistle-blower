@@ -55,19 +55,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     $validStatuses = ['new', 'investigating', 'resolved', 'closed'];
     
     if (in_array($newStatus, $validStatuses)) {
-        $stmt = $conn->prepare("UPDATE reports SET status = ?, updated_at = NOW() WHERE id = ?");
-        $stmt->execute([$newStatus, $reportId]);
+        $data = array($newStatus, $reportId);
+        update_report_status($conn, $data);
         
         // Log the action
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
         $metadata = json_encode(['old_status' => $report['status'], 'new_status' => $newStatus]);
-        
-        $stmt = $conn->prepare("
-            INSERT INTO audit_logs (report_id, admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-            VALUES (?, ?, 'status_updated', ?, ?, ?, NOW())
-        ");
-        $stmt->execute([$reportId, $_SESSION['admin_id'], $ipHash, $userAgentHash, $metadata]);
+
+        $categoryLogData = [
+            'report_id'       =>$reportId,
+            'admin_user_id'   => $_SESSION['admin_id'],
+            'action'          => 'status_updated',
+            'ip_hash'         => $ipHash,
+            'user_agent_hash' => $userAgentHash,
+            'metadata'        => $metadata,
+            'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+        ];
+        log_system_action($conn, 'audit_logs', $categoryLogData);
         
         // REFRESH WITH JOIN QUERY TO PRESERVE CATEGORY_NAME
         $report = complete_report_category_data($conn, $reportId);
@@ -86,17 +91,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_visibility']))
     if (in_array($newVisibility, $validVisibilities) && in_array($newPublicationStatus, $validPublicationStatuses)) {
         $stmt = $conn->prepare("UPDATE reports SET visibility = ?, publication_status = ?, updated_at = NOW() WHERE id = ?");
         $stmt->execute([$newVisibility, $newPublicationStatus, $reportId]);
+        $data = array($newVisibility, $newPublicationStatus, $reportId);
+        update_report_visibility($conn, $data);
         
         // Log the action
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
         $metadata = json_encode(['visibility' => $newVisibility, 'publication_status' => $newPublicationStatus]);
-        
-        $stmt = $conn->prepare("
-            INSERT INTO audit_logs (report_id, admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-            VALUES (?, ?, 'visibility_updated', ?, ?, ?, NOW())
-        ");
-        $stmt->execute([$reportId, $_SESSION['admin_id'], $ipHash, $userAgentHash, $metadata]);
+
+        $categoryLogData = [
+            'report_id'       =>$reportId,
+            'admin_user_id'   => $_SESSION['admin_id'],
+            'action'          => 'visibility_updated',
+            'ip_hash'         => $ipHash,
+            'user_agent_hash' => $userAgentHash,
+            'metadata'        => $metadata,
+            'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+        ];
+        log_system_action($conn, 'audit_logs', $categoryLogData);
         
         // REFRESH WITH JOIN QUERY TO PRESERVE CATEGORY_NAME
         $report = complete_report_category_data($conn, $reportId);
@@ -115,17 +127,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
         // Log the action
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-        
-        $stmt = $conn->prepare("
-            INSERT INTO audit_logs (report_id, admin_user_id, action, ip_hash, user_agent_hash, created_at)
-            VALUES (?, ?, 'message_sent', ?, ?, NOW())
-        ");
-        $stmt->execute([$reportId, $_SESSION['admin_id'], $ipHash, $userAgentHash]);
+
+        $categoryLogData = [
+            'report_id'       =>$reportId,
+            'admin_user_id'   => $_SESSION['admin_id'],
+            'action'          => 'message_sent',
+            'ip_hash'         => $ipHash,
+            'user_agent_hash' => $userAgentHash,
+            'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+        ];
+        log_system_action($conn, 'audit_logs', $categoryLogData);
         
         // Refresh messages
-        $stmt = $conn->prepare("SELECT * FROM messages WHERE report_id = ? ORDER BY created_at ASC");
-        $stmt->execute([$reportId]);
-        $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $messages = fetch_messages($conn, $reportId);
         
         $successMessage = "Message sent successfully!";
     }
@@ -135,14 +149,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_evidence'])) {
     $evidenceId = (int)$_POST['evidence_id'];
     $isPublic = isset($_POST['is_public']) ? 1 : 0;
-    
-    $stmt = $conn->prepare("UPDATE evidences SET is_public = ? WHERE id = ? AND report_id = ?");
-    $stmt->execute([$isPublic, $evidenceId, $reportId]);
+
+    $data = array($isPublic, $evidenceId, $reportId);
+    update_evidence_visibility($conn, $data);
     
     // Refresh evidences
-    $stmt = $conn->prepare("SELECT * FROM evidences WHERE report_id = ? ORDER BY created_at DESC");
-    $stmt->execute([$reportId]);
-    $evidences = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $evidences = fetch_evidences($conn, $reportId);
     
     $successMessage = "Evidence visibility updated successfully!";
 }

@@ -14,8 +14,14 @@ if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true
     $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
     $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
 
-    $action = array($_SESSION['admin_id'] ?? null, "admin_logout", $ipHash, $userAgentHash);
-    log_admin_action($conn, $action);
+    $categoryLogData = [
+        'admin_user_id'   => array($_SESSION['admin_id'] ?? null),
+        'action'          => 'admin_logout',
+        'ip_hash'         => $ipHash,
+        'user_agent_hash' => $userAgentHash,
+        'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+    ];
+    log_system_action($conn, 'audit_logs', $categoryLogData);
 }
 
 // Destroy all session data

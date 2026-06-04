@@ -123,16 +123,7 @@ $resolvedCount = count_reports($conn, "resolved");
 $closedCount = count_reports($conn, "closed");
 
 // Get count of reports with unread messages
-$stmt = $conn->prepare("
-    SELECT COUNT(DISTINCT r.id) as count
-    FROM reports r
-    JOIN messages m ON r.id = m.report_id
-    WHERE m.sender_type = 'whistleblower' 
-    AND m.is_read = FALSE
-    AND r.status != 'closed'
-");
-$stmt->execute();
-$unreadReportsCount = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
+$unreadReportsCount = count_unread_reports($conn);
 
 ?>
 <!DOCTYPE html>

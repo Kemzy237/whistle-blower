@@ -49,8 +49,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_general_settin
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
 
-        $action = array($adminId, "settings_updated", $ipHash, $userAgentHash, json_encode(['settings_type' => 'general']));
-        log_admin_action($conn, $action);
+        $categoryLogData = [
+            'admin_user_id'   => $adminId,
+            'action'          => 'settings_updated',
+            'ip_hash'         => $ipHash,
+            'user_agent_hash' => $userAgentHash,
+            'metadata'        => json_encode(['settings_type' => 'general']),
+            'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+        ];
+        log_system_action($conn, 'audit_logs', $categoryLogData);
     } else {
         $errorMessage = 'Failed to save settings. Please check folder permissions.';
     }
@@ -71,11 +78,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_category'])) {
             // Log the action
             $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
             $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-            $stmt = $conn->prepare("
-                INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-                VALUES (?, 'category_added', ?, ?, ?, NOW())
-            ");
-            $stmt->execute([$adminId, $ipHash, $userAgentHash, json_encode(['category_name' => $categoryName])]);
+
+            $categoryLogData = [
+                'admin_user_id'   => $adminId,
+                'action'          => 'category_added',
+                'ip_hash'         => $ipHash,
+                'user_agent_hash' => $userAgentHash,
+                'metadata'        => json_encode(['category_name' => $categoryName]),
+                'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+            ];
+            log_system_action($conn, 'audit_logs', $categoryLogData);
         } else {
             $errorMessage = 'Failed to add category.';
         }
@@ -96,11 +108,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_category'])) {
         // Log the action
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-        $stmt = $conn->prepare("
-            INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-            VALUES (?, 'category_updated', ?, ?, ?, NOW())
-        ");
-        $stmt->execute([$adminId, $ipHash, $userAgentHash, json_encode(['category_id' => $categoryId])]);
+
+        $categoryLogData = [
+            'admin_user_id'   => $adminId,
+            'action'          => 'category_updated',
+            'ip_hash'         => $ipHash,
+            'user_agent_hash' => $userAgentHash,
+            'metadata'        => json_encode(['category_id' => $categoryId]),
+            'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+        ];
+        log_system_action($conn, 'audit_logs', $categoryLogData);
     } else {
         $errorMessage = 'Failed to update category.';
     }
@@ -122,11 +139,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_category'])) {
             // Log the action
             $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
             $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-            $stmt = $conn->prepare("
-                INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-                VALUES (?, 'category_deleted', ?, ?, ?, NOW())
-            ");
-            $stmt->execute([$adminId, $ipHash, $userAgentHash, json_encode(['category_id' => $categoryId])]);
+
+            $categoryLogData = [
+                'admin_user_id'   => $adminId,
+                'action'          => 'category_deleted',
+                'ip_hash'         => $ipHash,
+                'user_agent_hash' => $userAgentHash,
+                'metadata'        => json_encode(['category_id' => $categoryId]),
+                'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+            ];
+            log_system_action($conn, 'audit_logs', $categoryLogData);
         } else {
             $errorMessage = 'Failed to delete category.';
         }
@@ -143,8 +165,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_cleanup'])) {
         // Log the action
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-        $action = array($adminId, "cleanup_executed", $ipHash, $userAgentHash);
-        log_admin_action($conn, $action);
+
+        $categoryLogData = [
+            'admin_user_id'   => $adminId,
+            'action'          => 'cleanup_executed',
+            'ip_hash'         => $ipHash,
+            'user_agent_hash' => $userAgentHash
+        ];
+        log_system_action($conn, 'audit_logs', $categoryLogData);
     } catch (PDOException $e) {
         $errorMessage = 'Cleanup failed: ' . $e->getMessage();
     }

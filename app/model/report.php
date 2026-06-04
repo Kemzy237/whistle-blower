@@ -793,13 +793,6 @@ function update_report($conn, $data){
     $stmt->execute($data);
 }
 
-function log_report_action($conn, $action) {
-    $sql = 'INSERT INTO audit_logs (report_id, admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, NOW())';
-    $stmt = $conn->prepare($sql);
-    $stmt->execute($action);
-}
-
  function get_file_path($conn, $data){
     $sql = "SELECT encrypted_file_path FROM evidences WHERE id = ? AND report_id = ?";
     $stmt = $conn->prepare($sql);
@@ -820,11 +813,25 @@ function log_report_action($conn, $action) {
     $stmt->execute([$reportId]);
 }
 
-function log_admin_action($conn, $action) {
-    $sql = 'INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, created_at)
-    VALUES (?, ?, ?, ?, NOW())';
-    $stmt = $conn->prepare($sql);
-    $stmt->execute($action);
+// function log_admin_action($conn, $action) {
+//     $sql = 'INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, created_at)
+//     VALUES (?, ?, ?, ?, NOW())';
+//     $stmt = $conn->prepare($sql);
+//     $stmt->execute($action);
+// }
+
+function log_system_action($conn, $table, $data) {
+    $columns = array_keys($data);
+    $columnString = '`' . implode('`, `', $columns) . '`';
+    $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+    $sql = "INSERT INTO `{$table}` ({$columnString}) VALUES ({$placeholders})";
+    try {
+        $stmt = $conn->prepare($sql);
+        return $stmt->execute(array_values($data));
+    } catch (PDOException $e) {
+        error_log("Dynamic logging failed: " . $e->getMessage());
+        return false;
+    }
 }
 
  function insert_category($conn, $data) {
@@ -886,3 +893,338 @@ function get_database_size($conn){
     $size = $stmt->fetch(PDO::FETCH_ASSOC);
     return $size;
 }
+
+function count_unread_reports($conn){
+    $sql = "SELECT COUNT(DISTINCT r.id) as count
+    FROM reports r
+    JOIN messages m ON r.id = m.report_id
+    WHERE m.sender_type = 'whistleblower' 
+    AND m.is_read = FALSE
+    AND r.status != 'closed";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result["count"];
+}
+
+function get_user_by_id($conn, $id){
+    $sql = "SELECT * FROM users WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $user;
+}
+
+function get_user_notification_settings($conn, $adminId){
+    $sql = "SELECT * FROM user_settings WHERE user_id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$adminId]);
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return $result;
+}
+
+function check_if_email_exists($conn, $data){
+    $sql = "SELECT id FROM users WHERE email = ? AND id != ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+    if($stmt->fetch()){
+        return true;
+    }else{
+        return false;
+    }
+}
+
+function update_user($conn, $data){
+    $sql = "UPDATE users SET name = ?, email = ?, updated_at = NOW() WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+    return true;
+}
+
+function update_user_password($conn, $data){
+    $sql = "UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+    return true;
+}
+
+ function insert_update_user_settings($conn, $data){
+    $sql = "INSERT INTO user_settings (user_id, notification_enabled, push_notification_token, device_type, updated_at)
+    VALUES (?, ?, ?, ?, NOW())
+    ON DUPLICATE KEY UPDATE 
+        notification_enabled = VALUES(notification_enabled),
+        push_notification_token = VALUES(push_notification_token),
+        device_type = VALUES(device_type),
+        updated_at = NOW()";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+    return true;
+}
+
+function push_notification_token($conn, $data){
+    $sql = "INSERT INTO user_settings (user_id, push_notification_token, device_type, updated_at)
+    VALUES (?, ?, ?, NOW())
+    ON DUPLICATE KEY UPDATE  
+        push_notification_token = VALUES(push_notification_token),
+        device_type = VALUES(device_type),
+        updated_at = NOW()";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+    return true;
+}
+
+// Function to send notification
+function sendNotification($userId, $title, $message, $type = 'general') {
+    global $conn;
+    
+    // Get user's push token and settings
+    $stmt = $conn->prepare("
+        SELECT us.push_notification_token, us.device_type, us.notification_enabled, u.email 
+        FROM user_settings us
+        JOIN users u ON us.user_id = u.id
+        WHERE us.user_id = ?
+    ");
+    $stmt->execute([$userId]);
+    $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$userData || !$userData['notification_enabled']) {
+        return false;
+    }
+    
+    $pushToken = $userData['push_notification_token'];
+    $deviceType = $userData['device_type'];
+    $email = $userData['email'];
+    
+    // Send push notification via OneSignal
+    if (!empty($pushToken)) {
+        sendOneSignalNotification($pushToken, $title, $message, $deviceType);
+    }
+    
+    // Send email notification (optional)
+    if ($type === 'new_message') {
+        sendEmailNotification($email, $title, $message);
+    }
+    
+    return true;
+}
+
+// Function to send OneSignal push notification
+function sendOneSignalNotification($pushToken, $title, $message, $deviceType = 'web') {
+    // Replace with your OneSignal App ID and API Key
+    $appId = 'YOUR_ONESIGNAL_APP_ID';
+    $apiKey = 'YOUR_ONESIGNAL_API_KEY';
+    
+    $content = array(
+        "en" => $message
+    );
+    
+    $fields = array(
+        'app_id' => $appId,
+        'include_player_ids' => array($pushToken),
+        'data' => array("foo" => "bar"),
+        'contents' => $content,
+        'headings' => array("en" => $title),
+        'priority' => 10
+    );
+    
+    $fields = json_encode($fields);
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://onesignal.com/api/v1/notifications");
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'Content-Type: application/json; charset=utf-8',
+        'Authorization: Basic ' . $apiKey
+    ));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+    curl_setopt($ch, CURLOPT_HEADER, FALSE);
+    curl_setopt($ch, CURLOPT_POST, TRUE);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $fields);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+    
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    return $response;
+}
+
+// Function to send email notification
+function sendEmailNotification($to, $subject, $message) {
+    $headers = "MIME-Version: 1.0" . "\r\n";
+    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
+    $headers .= 'From: noreply@whistleguard.com' . "\r\n";
+    
+    $htmlMessage = "
+    <html>
+    <head>
+        <title>{$subject}</title>
+        <style>
+            body { font-family: Arial, sans-serif; background: #0a0e1a; color: #fff; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #4f46e5, #7c3aed); padding: 20px; text-align: center; border-radius: 10px; }
+            .content { background: rgba(20, 24, 36, 0.95); padding: 20px; border-radius: 10px; margin-top: 20px; }
+            .button { background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; }
+        </style>
+    </head>
+    <body>
+        <div class='container'>
+            <div class='header'>
+                <h2>WhistleGuard Notification</h2>
+            </div>
+            <div class='content'>
+                <h3>{$subject}</h3>
+                <p>{$message}</p>
+                <a href='https://yourdomain.com/admin-dashboard.php' class='button'>View Dashboard</a>
+            </div>
+        </div>
+    </body>
+    </html>
+    ";
+    
+    return mail($to, $subject, $htmlMessage, $headers);
+}
+
+// Function to send test notification
+function sendTestNotification($userId, $pushToken, $deviceType) {
+    sendOneSignalNotification($pushToken, 'Test Notification', 'Your notifications are working! Welcome to WhistleGuard.', $deviceType);
+}
+
+
+function count_user_activity($conn, $userId) {
+    $sql = 'SELECT COUNT(*) as total_actions FROM audit_logs WHERE admin_user_id = ?';
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$userId]);
+    $totalActions = $stmt->fetch(PDO::FETCH_ASSOC)['total_actions'];
+    return $totalActions;
+}
+
+function get_recent_activity($conn, $adminId){
+    $sql = "SELECT action, COUNT(*) as count 
+    FROM audit_logs 
+    WHERE admin_user_id = ? 
+    GROUP BY action 
+    ORDER BY count DESC 
+    LIMIT 5";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$adminId]);
+    $recentActivities = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return $recentActivities;
+}
+
+function update_report_status($conn, $data){
+    $sql = "UPDATE reports SET status = ?, updated_at = NOW() WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+}
+
+function update_report_visibility($conn, $data){
+    $sql = "UPDATE reports SET visibility = ?, publication_status = ?, updated_at = NOW() WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+}
+
+ function update_evidence_visibility($conn, $data){
+    $sql = "UPDATE evidences SET is_public = ? WHERE id = ? AND report_id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($data);
+}
+
+ function get_evidence_by_id($conn, $evidenceId) {
+    $sql = "SELECT e.*, r.tracking_code 
+    FROM evidences e 
+    JOIN reports r ON e.report_id = r.id 
+    WHERE e.id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$evidenceId]);
+    $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $evidence;
+}
+
+ function get_access_token($conn, $token) {
+    $sql = "SELECT id, report_id, token, type, expires_at, used_at 
+    FROM access_tokens 
+    WHERE token = ? AND type = 'view_evidence' AND expires_at > NOW() AND used_at IS NULL";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$token]);
+    $accessToken = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $accessToken;
+}
+
+ function mark_token_as_read($conn, $token) {
+    $sql = 'UPDATE access_tokens SET used_at = NOW() WHERE id = ?';
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$token]);
+}
+
+function get_latest_report_evidence($conn, $accessToken){
+    $sql = "SELECT e.*, r.tracking_code 
+    FROM evidences e 
+    JOIN reports r ON e.report_id = r.id 
+    WHERE e.report_id = ?
+    ORDER BY e.id DESC 
+    LIMIT 1";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$accessToken]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result;
+}
+
+
+function update_view_count($conn, $id){
+    $sql = "UPDATE evidences 
+    SET view_count = view_count + 1, updated_at = NOW() 
+    WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$id]);
+}
+
+function validate_access_token($conn, $token){
+    $sql = "SELECT id, report_id, token, type, expires_at, used_at 
+    FROM access_tokens 
+    WHERE token = ? AND type = 'view_evidence' AND expires_at > NOW()";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$token]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result;
+}
+
+function check_access_token($conn, $token){
+    $sql = "SELECT id, report_id, token, type, expires_at, used_at 
+    FROM access_tokens 
+    WHERE token = ? AND type = 'view_evidence' AND expires_at > DATE_SUB(NOW(), INTERVAL 1 DAY)";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$token]);
+    $token = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $token;
+}
+
+function mark_access_token($conn, $token) {
+    $sql = 'UPDATE access_tokens SET used_at = NOW() WHERE id = ?';
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$token]);
+}
+
+function get_public_approved_evidence_by_id($conn, $evidenceId) {
+    $sql = "SELECT e.*, r.tracking_code 
+    FROM evidences e 
+    JOIN reports r ON e.report_id = r.id 
+    WHERE e.id = ? AND e.is_public = TRUE
+    AND r.visibility = 'public' AND r.publication_status = 'approved'";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$evidenceId]);
+    $approved = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $approved;
+}
+
+ function get_public_approved_report_by_id($conn, $evidenceId){
+    $sql = "SELECT e.*, r.tracking_code 
+    FROM evidences e 
+    JOIN reports r ON e.report_id = r.id 
+    WHERE e.report_id = ? AND e.is_public = TRUE
+    AND r.visibility = 'public' AND r.publication_status = 'approved'
+    ORDER BY e.id DESC LIMIT 1";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$evidenceId]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result;
+}
+

@@ -75,8 +75,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
             $metadata = json_encode(['updated_fields' => ['category', 'description', 'priority', 'visibility', 'publication_status', 'expires_at']]);
 
-            $action = array($reportId, $_SESSION['admin_id'], "report_updated", $ipHash, $userAgentHash, $metadata);
-            log_report_action($conn, $action);
+            $categoryLogData = [
+                'report_id'       => $reportId,
+                'admin_user_id'   => $_SESSION['admin_id'],
+                'action'          => 'report_updated',
+                'ip_hash'         => $ipHash,
+                'user_agent_hash' => $userAgentHash,
+                'metadata'        => $metadata,
+                'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+            ];
+            log_system_action($conn, 'audit_logs', $categoryLogData);
             
             // Refresh report data
             $report = get_report_without_catDescription($conn, $reportId);
@@ -114,9 +122,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
             $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
             $metadata = json_encode(['evidence_id' => $evidenceId]);
-            
-            $data=array($reportId, $_SESSION['admin_id'], "evidence_deleted", $ipHash, $userAgentHash, $metadata);
-            log_report_action($conn, $data);
+
+            $categoryLogData = [
+                'report_id'       => $reportId,
+                'admin_user_id'   => $_SESSION['admin_id'],
+                'action'          => 'ecidence_deleted',
+                'ip_hash'         => $ipHash,
+                'user_agent_hash' => $userAgentHash,
+                'metadata'        => $metadata,
+                'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+            ];
+            log_system_action($conn, 'audit_logs', $categoryLogData);
             
             $successMessage = "Evidence deleted successfully!";
         }
@@ -128,9 +144,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
         $metadata = json_encode(['report_id' => $reportId, 'tracking_code' => $report['tracking_code']]);
-        
-        $data=array($reportId, $_SESSION['admin_id'], "report_deleted", $ipHash, $userAgentHash, $metadata);
-        log_report_action($conn, $data);
+
+        $categoryLogData = [
+                'report_id'       => $reportId,
+                'admin_user_id'   => $_SESSION['admin_id'],
+                'action'          => 'report_deleted',
+                'ip_hash'         => $ipHash,
+                'user_agent_hash' => $userAgentHash,
+                'metadata'        => $metadata,
+                'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+            ];
+            log_system_action($conn, 'audit_logs', $categoryLogData);
         
         // Delete report (cascade will delete evidences, messages, etc.)
         delete_report($conn, $reportId);

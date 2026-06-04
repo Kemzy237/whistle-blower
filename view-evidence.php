@@ -19,14 +19,7 @@ if ($isAdmin) {
     $evidenceId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
     
     if ($evidenceId > 0) {
-        $stmt = $conn->prepare("
-            SELECT e.*, r.tracking_code 
-            FROM evidences e 
-            JOIN reports r ON e.report_id = r.id 
-            WHERE e.id = ?
-        ");
-        $stmt->execute([$evidenceId]);
-        $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
+        $evidence = get_evidence_by_id($conn, $evidenceId);
     }
     
     if (!$evidence) {
@@ -42,13 +35,7 @@ if ($isAdmin) {
     }
 
     // Validate access token
-    $stmt = $conn->prepare("
-        SELECT id, report_id, token, type, expires_at, used_at 
-        FROM access_tokens 
-        WHERE token = ? AND type = 'view_evidence' AND expires_at > NOW() AND used_at IS NULL
-    ");
-    $stmt->execute([$token]);
-    $accessToken = $stmt->fetch(PDO::FETCH_ASSOC);
+    $accessToken = get_access_token($conn, $token);
 
     if (!$accessToken) {
         unset($_SESSION['access_token']);
@@ -57,8 +44,7 @@ if ($isAdmin) {
     }
 
     // Mark token as used
-    $stmt = $conn->prepare("UPDATE access_tokens SET used_at = NOW() WHERE id = ?");
-    $stmt->execute([$accessToken['id']]);
+    mark_token_as_read($conn, $accessToken['id']);
 
     // Clear session token
     unset($_SESSION['access_token']);
@@ -68,26 +54,10 @@ if ($isAdmin) {
     unset($_SESSION['evidence_id_to_view']);
 
     if ($evidenceId) {
-        $stmt = $conn->prepare("
-            SELECT e.*, r.tracking_code 
-            FROM evidences e 
-            JOIN reports r ON e.report_id = r.id 
-            WHERE e.id = ?
-        ");
-        $stmt->execute([$evidenceId]);
-        $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
+        $evidence = get_evidence_by_id($conn, $evidenceId);
     } else {
         // Fallback: get latest evidence for this report
-        $stmt = $conn->prepare("
-            SELECT e.*, r.tracking_code 
-            FROM evidences e 
-            JOIN reports r ON e.report_id = r.id 
-            WHERE e.report_id = ?
-            ORDER BY e.id DESC 
-            LIMIT 1
-        ");
-        $stmt->execute([$accessToken['report_id']]);
-        $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
+        $evidence = get_latest_report_evidence($conn, $accessToken);
     }
 
     if (!$evidence) {
@@ -95,12 +65,7 @@ if ($isAdmin) {
     }
 
     // Update view count only for public views (Optional: keeps metrics clean from admin interference)
-    $stmt = $conn->prepare("
-        UPDATE evidences 
-        SET view_count = view_count + 1, updated_at = NOW() 
-        WHERE id = ?
-    ");
-    $stmt->execute([$evidence['id']]);
+    update_view_count($conn, $evidence['id']);
 }
 
 // 3. RETRIEVE AND DISPATCH FILE (Shared by both Admin and User)

@@ -15,25 +15,13 @@ if (empty($token)) {
 unset($_SESSION['public_access_token']);
 
 // Validate access token (allow used tokens for unlimited access)
-$stmt = $conn->prepare("
-    SELECT id, report_id, token, type, expires_at, used_at 
-    FROM access_tokens 
-    WHERE token = ? AND type = 'view_evidence' AND expires_at > NOW()
-");
-$stmt->execute([$token]);
-$accessToken = $stmt->fetch(PDO::FETCH_ASSOC);
+$accessToken = validate_access_token($conn, $token);
 
 // For unlimited tokens, allow even if used
 $isUnlimited = false;
 if (!$accessToken) {
     // Check if token exists but was used (unlimited access)
-    $stmt = $conn->prepare("
-        SELECT id, report_id, token, type, expires_at, used_at 
-        FROM access_tokens 
-        WHERE token = ? AND type = 'view_evidence' AND expires_at > DATE_SUB(NOW(), INTERVAL 1 DAY)
-    ");
-    $stmt->execute([$token]);
-    $accessToken = $stmt->fetch(PDO::FETCH_ASSOC);
+    $accessToken = check_access_token($conn, $token);
     
     if ($accessToken && $accessToken['used_at'] !== null) {
         $isUnlimited = true; // Allow reuse for unlimited tokens
@@ -46,8 +34,7 @@ if (!$accessToken) {
 
 // Only mark as used if not unlimited
 if (!$isUnlimited && $accessToken['used_at'] === null) {
-    $stmt = $conn->prepare("UPDATE access_tokens SET used_at = NOW() WHERE id = ?");
-    $stmt->execute([$accessToken['id']]);
+    mark_access_token($conn, $accessToken['id']);
 }
 
 // Get evidence
@@ -55,26 +42,9 @@ $evidenceId = $_SESSION['token_evidence_id'] ?? null;
 unset($_SESSION['token_evidence_id']);
 
 if ($evidenceId) {
-    $stmt = $conn->prepare("
-        SELECT e.*, r.tracking_code 
-        FROM evidences e 
-        JOIN reports r ON e.report_id = r.id 
-        WHERE e.id = ? AND e.is_public = TRUE
-        AND r.visibility = 'public' AND r.publication_status = 'approved'
-    ");
-    $stmt->execute([$evidenceId]);
-    $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
+    $evidence = get_public_approved_evidence_by_id($conn, $evidenceId);
 } else {
-    $stmt = $conn->prepare("
-        SELECT e.*, r.tracking_code 
-        FROM evidences e 
-        JOIN reports r ON e.report_id = r.id 
-        WHERE e.report_id = ? AND e.is_public = TRUE
-        AND r.visibility = 'public' AND r.publication_status = 'approved'
-        ORDER BY e.id DESC LIMIT 1
-    ");
-    $stmt->execute([$accessToken['report_id']]);
-    $evidence = $stmt->fetch(PDO::FETCH_ASSOC);
+    $evidence = get_public_approved_report_by_id($conn, $evidenceId);
 }
 
 if (!$evidence) {
@@ -82,8 +52,7 @@ if (!$evidence) {
 }
 
 // Update view count (always increment, even for unlimited)
-$stmt = $conn->prepare("UPDATE evidences SET view_count = view_count + 1, updated_at = NOW() WHERE id = ?");
-$stmt->execute([$evidence['id']]);
+update_view_count($conn, $evidence['id']);
 
 // Decrypt file path and retrieve file
 $filePath = decryptData($evidence['encrypted_file_path'], ENCRYPTION_KEY);

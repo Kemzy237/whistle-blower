@@ -19,9 +19,7 @@ $adminRole = $_SESSION['admin_role'] ?? 'admin';
 $adminEmail = $_SESSION['admin_email'] ?? '';
 
 // Fetch complete user data from database
-$stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
-$stmt->execute([$adminId]);
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
+$user = get_user_by_id($conn, $adminId);
 
 if (!$user) {
     header('Location: admin-logout.php');
@@ -29,9 +27,7 @@ if (!$user) {
 }
 
 // Fetch user notification settings
-$stmt = $conn->prepare("SELECT * FROM user_settings WHERE user_id = ?");
-$stmt->execute([$adminId]);
-$userSettings = $stmt->fetch(PDO::FETCH_ASSOC);
+$userSettings = get_user_notification_settings($conn, $adminId);
 
 $emailNotifications = $userSettings['notification_enabled'] ?? true;
 $pushToken = $userSettings['push_notification_token'] ?? '';
@@ -53,13 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errorMessage = 'Please enter a valid email address.';
         } else {
-            $stmt = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-            $stmt->execute([$email, $adminId]);
-            if ($stmt->fetch()) {
+            $data = array($email, $adminId);
+
+            if (check_if_email_exists($conn, $data)) {
                 $errorMessage = 'Email already exists for another user.';
             } else {
-                $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, updated_at = NOW() WHERE id = ?");
-                if ($stmt->execute([$name, $email, $adminId])) {
+                $data = array($name, $email, $adminId);
+                if (update_user($conn, $data)) {
                     $_SESSION['admin_name'] = $name;
                     $_SESSION['admin_email'] = $email;
                     $adminName = $name;
@@ -68,11 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
                     $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-                    $stmt = $conn->prepare("
-                        INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-                        VALUES (?, 'profile_updated', ?, ?, ?, NOW())
-                    ");
-                    $stmt->execute([$adminId, $ipHash, $userAgentHash, json_encode(['updated_fields' => ['name', 'email']])]);
+
+                    $categoryLogData = [
+                        'admin_user_id'   => $adminId,
+                        'action'          => 'profile_updated',
+                        'ip_hash'         => $ipHash,
+                        'user_agent_hash' => $userAgentHash,
+                        'metadata'        => json_encode(['updated_fields' => ['name', 'email']]),
+                        'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+                    ];
+                    log_system_action($conn, 'audit_logs', $categoryLogData);
                 } else {
                     $errorMessage = 'Failed to update profile. Please try again.';
                 }
@@ -95,17 +96,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             if (password_verify($currentPassword, $user['password'])) {
                 $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-                $stmt = $conn->prepare("UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?");
-                if ($stmt->execute([$hashedPassword, $adminId])) {
+                $data = array($hashedPassword, $adminId);
+                if (update_user_password($conn, $data)) {
                     $successMessage = 'Password changed successfully!';
                     
                     $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
                     $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-                    $stmt = $conn->prepare("
-                        INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, created_at)
-                        VALUES (?, 'password_changed', ?, ?, NOW())
-                    ");
-                    $stmt->execute([$adminId, $ipHash, $userAgentHash]);
+
+                    $categoryLogData = [
+                        'admin_user_id'   => $adminId,
+                        'action'          => 'password_changed',
+                        'ip_hash'         => $ipHash,
+                        'user_agent_hash' => $userAgentHash,
+                        'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+                    ];
+                    log_system_action($conn, 'audit_logs', $categoryLogData);
                     
                     // Send notification about password change
                     sendNotification($adminId, 'Password Changed', 'Your admin password was successfully changed.', 'security');
@@ -126,17 +131,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deviceType = $_POST['device_type'] ?? 'web';
         
         // Insert or update user settings
-        $stmt = $conn->prepare("
-            INSERT INTO user_settings (user_id, notification_enabled, push_notification_token, device_type, updated_at)
-            VALUES (?, ?, ?, ?, NOW())
-            ON DUPLICATE KEY UPDATE 
-                notification_enabled = VALUES(notification_enabled),
-                push_notification_token = VALUES(push_notification_token),
-                device_type = VALUES(device_type),
-                updated_at = NOW()
-        ");
+        $data = array($adminId, $emailNotifications, $pushToken, $deviceType);
         
-        if ($stmt->execute([$adminId, $emailNotifications, $pushToken, $deviceType])) {
+        if (insert_update_user_settings($conn, $data)) {
             $successMessage = 'Notification preferences updated successfully!';
             
             // Send test notification if enabled
@@ -147,11 +144,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Log the action
             $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
             $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-            $stmt = $conn->prepare("
-                INSERT INTO audit_logs (admin_user_id, action, ip_hash, user_agent_hash, metadata, created_at)
-                VALUES (?, 'preferences_updated', ?, ?, ?, NOW())
-            ");
-            $stmt->execute([$adminId, $ipHash, $userAgentHash, json_encode(['email_notifications' => $emailNotifications, 'device_type' => $deviceType])]);
+
+            $categoryLogData = [
+                'admin_user_id'   => $adminId,
+                'action'          => 'preferences_updated',
+                'ip_hash'         => $ipHash,
+                'user_agent_hash' => $userAgentHash,
+                'metadata'        => json_encode(['email_notifications' => $emailNotifications, 'device_type' => $deviceType]),
+                'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+            ];
+            log_system_action($conn, 'audit_logs', $categoryLogData);
         } else {
             $errorMessage = 'Failed to update preferences. Please try again.';
         }
@@ -166,13 +168,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $conn->prepare("
                 INSERT INTO user_settings (user_id, push_notification_token, device_type, updated_at)
                 VALUES (?, ?, ?, NOW())
-                ON DUPLICATE KEY UPDATE 
+                ON DUPLICATE KEY UPDATE  
                     push_notification_token = VALUES(push_notification_token),
                     device_type = VALUES(device_type),
                     updated_at = NOW()
             ");
+
+            $data = array($adminId, $pushToken, $deviceType);
             
-            if ($stmt->execute([$adminId, $pushToken, $deviceType])) {
+            if (push_notification_token($conn, $data)) {
                 echo json_encode(['success' => true, 'message' => 'Push token registered successfully']);
                 exit;
             } else {
@@ -183,136 +187,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Function to send notification
-function sendNotification($userId, $title, $message, $type = 'general') {
-    global $conn;
-    
-    // Get user's push token and settings
-    $stmt = $conn->prepare("
-        SELECT us.push_notification_token, us.device_type, us.notification_enabled, u.email 
-        FROM user_settings us
-        JOIN users u ON us.user_id = u.id
-        WHERE us.user_id = ?
-    ");
-    $stmt->execute([$userId]);
-    $userData = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$userData || !$userData['notification_enabled']) {
-        return false;
-    }
-    
-    $pushToken = $userData['push_notification_token'];
-    $deviceType = $userData['device_type'];
-    $email = $userData['email'];
-    
-    // Send push notification via OneSignal
-    if (!empty($pushToken)) {
-        sendOneSignalNotification($pushToken, $title, $message, $deviceType);
-    }
-    
-    // Send email notification (optional)
-    if ($type === 'new_message') {
-        sendEmailNotification($email, $title, $message);
-    }
-    
-    return true;
-}
-
-// Function to send OneSignal push notification
-function sendOneSignalNotification($pushToken, $title, $message, $deviceType = 'web') {
-    // Replace with your OneSignal App ID and API Key
-    $appId = 'YOUR_ONESIGNAL_APP_ID';
-    $apiKey = 'YOUR_ONESIGNAL_API_KEY';
-    
-    $content = array(
-        "en" => $message
-    );
-    
-    $fields = array(
-        'app_id' => $appId,
-        'include_player_ids' => array($pushToken),
-        'data' => array("foo" => "bar"),
-        'contents' => $content,
-        'headings' => array("en" => $title),
-        'priority' => 10
-    );
-    
-    $fields = json_encode($fields);
-    
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, "https://onesignal.com/api/v1/notifications");
-    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-        'Content-Type: application/json; charset=utf-8',
-        'Authorization: Basic ' . $apiKey
-    ));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-    curl_setopt($ch, CURLOPT_HEADER, FALSE);
-    curl_setopt($ch, CURLOPT_POST, TRUE);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $fields);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
-    
-    $response = curl_exec($ch);
-    curl_close($ch);
-    
-    return $response;
-}
-
-// Function to send email notification
-function sendEmailNotification($to, $subject, $message) {
-    $headers = "MIME-Version: 1.0" . "\r\n";
-    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-    $headers .= 'From: noreply@whistleguard.com' . "\r\n";
-    
-    $htmlMessage = "
-    <html>
-    <head>
-        <title>{$subject}</title>
-        <style>
-            body { font-family: Arial, sans-serif; background: #0a0e1a; color: #fff; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #4f46e5, #7c3aed); padding: 20px; text-align: center; border-radius: 10px; }
-            .content { background: rgba(20, 24, 36, 0.95); padding: 20px; border-radius: 10px; margin-top: 20px; }
-            .button { background: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; }
-        </style>
-    </head>
-    <body>
-        <div class='container'>
-            <div class='header'>
-                <h2>WhistleGuard Notification</h2>
-            </div>
-            <div class='content'>
-                <h3>{$subject}</h3>
-                <p>{$message}</p>
-                <a href='https://yourdomain.com/admin-dashboard.php' class='button'>View Dashboard</a>
-            </div>
-        </div>
-    </body>
-    </html>
-    ";
-    
-    return mail($to, $subject, $htmlMessage, $headers);
-}
-
-// Function to send test notification
-function sendTestNotification($userId, $pushToken, $deviceType) {
-    sendOneSignalNotification($pushToken, 'Test Notification', 'Your notifications are working! Welcome to WhistleGuard.', $deviceType);
-}
-
 // Get user activity statistics
-$stmt = $conn->prepare("SELECT COUNT(*) as total_actions FROM audit_logs WHERE admin_user_id = ?");
-$stmt->execute([$adminId]);
-$totalActions = $stmt->fetch(PDO::FETCH_ASSOC)['total_actions'];
+$totalActions = count_user_activity($conn, $adminId);
 
-$stmt = $conn->prepare("
-    SELECT action, COUNT(*) as count 
-    FROM audit_logs 
-    WHERE admin_user_id = ? 
-    GROUP BY action 
-    ORDER BY count DESC 
-    LIMIT 5
-");
-$stmt->execute([$adminId]);
-$recentActions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$recentActions = get_recent_activity($conn, $adminId);
 ?>
 <!DOCTYPE html>
 <html lang="en">
