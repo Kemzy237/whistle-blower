@@ -9,7 +9,7 @@ if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== tru
 }
 
 require_once '../db_connection.php';
-require_once '../app/model/report.php';
+require_once '../app/model/index.php';
 
 $unreadCount = getUnreadMessagesCount($conn);
 

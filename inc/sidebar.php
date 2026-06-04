@@ -1,7 +1,7 @@
 <?php
 // Include database connection for notifications
 require_once 'db_connection.php';
-require_once 'app/model/report.php';
+require_once 'app/model/index.php';
 
 // Get unread messages count
 $unreadReportsCount = getUnreadMessagesCount($conn);

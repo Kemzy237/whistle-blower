@@ -1,6 +1,6 @@
 <?php 
     include "db_connection.php";
-    include "app/model/report.php";
+    include "app/model/index.php";
     $num_reports = count_all_reports($conn);
     $num_resolved_reports = count_reports($conn, "resolved");
 ?>
@@ -513,6 +513,17 @@
                 opacity: 0;
             }
         }
+        /* Category select styling */
+        #categorySelect option {
+            padding: 10px;
+        }
+
+        #categoryDescription {
+            display: block;
+            margin-top: 5px;
+            font-size: 0.75rem;
+            transition: all 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -781,66 +792,108 @@
     
     <!-- Submit Report Modal -->
     <!-- Replace the submitReportModal content with this -->
-<div class="modal fade" id="submitReportModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content modal-content-glass">
-            <div class="modal-header border-0">
-                <h5 class="modal-title">
-                    <i class="fas fa-edit me-2" style="color: #4f46e5;"></i>Submit Anonymous Report
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="reportForm" action="app/submit-report.php" method="POST" enctype="multipart/form-data" target="_blank" autocomplete="off">
-                    <div class="mb-3">
-                        <label class="form-label">Category</label>
-                        <select class="form-select form-select-glass" name="category" required>
-                            <option value="">Select category</option>
-                            <option value="Corruption">Corruption</option>
-                            <option value="Fraud">Fraud</option>
-                            <option value="Harassment">Harassment</option>
-                            <option value="Safety Violations">Safety Violations</option>
-                            <option value="Data Breach">Data Breach</option>
-                            <option value="Other">Other</option>
-                        </select>
+    <!-- Submit Report Modal with Category Descriptions -->
+    <div class="modal fade" id="submitReportModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content modal-content-glass">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title">
+                        <i class="fas fa-edit me-2" style="color: #4f46e5;"></i>Submit Anonymous Report
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="reportForm" action="app/submit-report.php" method="POST" enctype="multipart/form-data" target="_blank" autocomplete="off">
+                        <div class="mb-3">
+                            <label class="form-label">Category</label>
+                            <select class="form-select form-select-glass" name="category" id="categorySelect" required>
+                                <option value="">Select category</option>
+                                <?php
+                                // Fetch active categories from database
+                                $catStmt = $conn->prepare("SELECT id, name, description FROM categories WHERE is_active = TRUE ORDER BY name");
+                                $catStmt->execute();
+                                $activeCategories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
+                                
+                                foreach ($activeCategories as $category) {
+                                    $categoryId = $category['id'];
+                                    $categoryName = htmlspecialchars($category['name']);
+                                    $categoryDesc = htmlspecialchars($category['description']);
+                                    echo "<option value='{$categoryName}' data-desc='{$categoryDesc}'>{$categoryName}</option>";
+                                }
+                                ?>
+                            </select>
+                            <small class="text-muted-custom" id="categoryDescription">Select a category to see its description</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control form-control-glass" name="description" rows="5" placeholder="Describe the incident in detail... (Include dates, locations, people involved, and any relevant details)" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Priority</label>
+                            <select class="form-select form-select-glass" name="priority" required>
+                                <option value="low">🟢 Low - Minor issue, no urgency</option>
+                                <option value="medium" selected>🔵 Medium - Needs attention</option>
+                                <option value="high">🟠 High - Urgent matter</option>
+                                <option value="critical">🔴 Critical - Immediate action required</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Evidence (Optional - Max 10MB)</label>
+                            <input type="file" class="form-control form-control-glass" name="evidence" accept=".jpg,.jpeg,.png,.pdf,.doc,.docx">
+                            <small class="text-muted-custom">Supported formats: JPG, PNG, PDF, DOC, DOCX</small>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="self_destruct" value="1" id="selfDestruct">
+                            <label class="form-check-label" for="selfDestruct">
+                                Enable self-destruct after 30 days
+                            </label>
+                        </div>
+                        <button type="submit" class="btn-primary-glass w-100">
+                            <i class="fas fa-paper-plane me-2"></i>Submit Report
+                        </button>
+                    </form>
+                    <div class="text-center mt-3">
+                        <small class="text-muted-custom">
+                            <i class="fas fa-lock me-1"></i>Your report is encrypted and anonymous
+                        </small>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Description</label>
-                        <textarea class="form-control form-control-glass" name="description" rows="5" placeholder="Describe the incident in detail..." required></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Priority</label>
-                        <select class="form-select form-select-glass" name="priority" required>
-                            <option value="low">Low</option>
-                            <option value="medium" selected>Medium</option>
-                            <option value="high">High</option>
-                            <option value="critical">Critical</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Evidence (Optional - Max 10MB)</label>
-                        <input type="file" class="form-control form-control-glass" name="evidence" accept=".jpg,.jpeg,.png,.pdf,.doc,.docx">
-                        <small class="text-muted-custom">Supported formats: JPG, PNG, PDF, DOC, DOCX</small>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" name="self_destruct" value="1" id="selfDestruct">
-                        <label class="form-check-label" for="selfDestruct">
-                            Enable self-destruct after 30 days
-                        </label>
-                    </div>
-                    <button type="submit" class="btn-primary-glass w-100">
-                        <i class="fas fa-paper-plane me-2"></i>Submit Report
-                    </button>
-                </form>
-                <div class="text-center mt-3">
-                    <small class="text-muted-custom">
-                        <i class="fas fa-lock me-1"></i>Your report is encrypted and anonymous
-                    </small>
                 </div>
             </div>
         </div>
     </div>
-</div>
+
+    <script>
+    // Add this script to show category description when selecting
+    document.addEventListener('DOMContentLoaded', function() {
+        const categorySelect = document.getElementById('categorySelect');
+        const categoryDescSpan = document.getElementById('categoryDescription');
+        
+        if (categorySelect && categoryDescSpan) {
+            // Function to update description
+            function updateCategoryDescription() {
+                const selectedOption = categorySelect.options[categorySelect.selectedIndex];
+                const description = selectedOption ? selectedOption.getAttribute('data-desc') : '';
+                
+                if (description) {
+                    categoryDescSpan.innerHTML = '<i class="fas fa-info-circle me-1"></i>' + description;
+                    categoryDescSpan.style.color = '#a5b4fc';
+                } else if (categorySelect.value === '') {
+                    categoryDescSpan.innerHTML = '<i class="fas fa-info-circle me-1"></i>Select a category to see its description';
+                    categoryDescSpan.style.color = '#8b92b0';
+                } else {
+                    categoryDescSpan.innerHTML = '<i class="fas fa-info-circle me-1"></i>No description available for this category';
+                    categoryDescSpan.style.color = '#8b92b0';
+                }
+            }
+            
+            // Update on page load
+            updateCategoryDescription();
+            
+            // Update when selection changes
+            categorySelect.addEventListener('change', updateCategoryDescription);
+        }
+    });
+    </script>
     
     <!-- Track Report Modal -->
     <div class="modal fade" id="trackReportModal" tabindex="-1">

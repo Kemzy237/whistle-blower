@@ -4,7 +4,7 @@ session_start();
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../db_connection.php';
-require_once __DIR__ . '/model/report.php';
+require_once __DIR__ . '/model/index.php';
 
 $reportId = isset($_GET['report_id']) ? (int)$_GET['report_id'] : 0;
 
@@ -14,18 +14,7 @@ if (!$reportId) {
 }
 
 // Get report details (only public approved reports)
-$stmt = $conn->prepare("
-    SELECT r.id, r.tracking_code, r.category_id, r.encrypted_description, 
-           r.status, r.priority, r.created_at, r.updated_at,
-           c.name as category_name
-    FROM reports r
-    JOIN categories c ON r.category_id = c.id
-    WHERE r.id = ? AND r.visibility = 'public' 
-    AND r.publication_status = 'approved'
-    AND (r.expires_at IS NULL OR r.expires_at > NOW())
-");
-$stmt->execute([$reportId]);
-$report = $stmt->fetch(PDO::FETCH_ASSOC);
+$report = get_approved_reports_details($conn, $reportId);
 
 if (!$report) {
     echo json_encode(['success' => false, 'error' => 'Report not found or not public']);

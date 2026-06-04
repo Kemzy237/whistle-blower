@@ -3,7 +3,7 @@
 session_start();
 
 require_once __DIR__ . '/db_connection.php';
-include "app/model/report.php";
+include "app/model/index.php";
 
 function decryptFilePath($encryptedPath, $key) {
     return decryptData($encryptedPath, $key);

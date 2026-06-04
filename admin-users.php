@@ -10,7 +10,7 @@ if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== tru
 
 // Include database connection
 require_once 'db_connection.php';
-require_once 'app/model/report.php';
+require_once 'app/model/index.php';
 
 // Get admin info from session
 $adminId = $_SESSION['admin_id'];

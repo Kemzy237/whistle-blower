@@ -9,7 +9,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Include database connection
 include "../db_connection.php";
-include "model/report.php";
+include "model/index.php";
 
 // Define encryption key (store this in environment variables in production!)
 // This is a sample key - in production, use a secure key management system
@@ -68,23 +68,9 @@ try {
     
     // Begin transaction
     $conn->beginTransaction();
-    
-    // Insert report
-    $stmt = $conn->prepare("
-        INSERT INTO reports (
-            anonymous_session_id, tracking_code, category_id, encrypted_description,
-            status, priority, view_once_enabled, expires_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'new', ?, FALSE, ?, NOW(), NOW())
-    ");
-    
-    $stmt->execute([
-        $anonymousSessionId,
-        $trackingCode,
-        $categoryId,
-        $encryptedDescription,
-        $priority,
-        $expiresAt
-    ]);
+
+    $data = array($anonymousSessionId, $trackingCode, $categoryId, $encryptedDescription, $priority, $expiresAt);
+    insert_report($conn, $data);
     
     $reportId = $conn->lastInsertId();
     
@@ -95,32 +81,25 @@ try {
     }
     
     // Create audit log entry (IP hashed for privacy but can detect patterns)
-    $stmt = $conn->prepare("
-        INSERT INTO audit_logs (report_id, action, ip_hash, user_agent_hash, metadata, created_at)
-        VALUES (?, 'report_submitted', ?, ?, ?, NOW())
-    ");
-    
     $metadata = json_encode([
         'category' => $category,
         'priority' => $priority,
         'has_evidence' => $evidenceId !== null,
         'self_destruct' => $selfDestruct
     ]);
-    
-    $stmt->execute([$reportId, $ipHash, $userAgentHash, $metadata]);
+    $categoryLogData = [
+        'report_id'       => $reportId,
+        'action'          => 'report_submitted',
+        'ip_hash'         => $ipHash,
+        'user_agent_hash' => $userAgentHash,
+        'metadata'        => $metadata,
+        'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+    ];
+    log_system_action($conn, 'audit_logs', $categoryLogData);
     
     // Update anonymous session report count
-    $stmt = $conn->prepare("
-        INSERT INTO anonymous_sessions (session_id, ip_hash, user_agent_hash, report_count, last_activity)
-        VALUES (?, ?, ?, 1, NOW())
-        ON DUPLICATE KEY UPDATE
-            report_count = report_count + 1,
-            last_activity = NOW(),
-            ip_hash = VALUES(ip_hash),
-            user_agent_hash = VALUES(user_agent_hash)
-    ");
-    
-    $stmt->execute([$anonymousSessionId, $ipHash, $userAgentHash]);
+    $data = array($anonymousSessionId, $ipHash, $userAgentHash);
+    insert_anonymous_session($conn, $data);
     
     // Commit transaction
     $conn->commit();
@@ -129,9 +108,7 @@ try {
     $_SESSION['last_tracking_code'] = $trackingCode;
     $_SESSION['last_report_success'] = true;
 
-    $stmt = $conn->prepare("SELECT email, name FROM users WHERE role IN ('admin', 'super_admin') AND is_active = 1");
-$stmt->execute();
-$admins = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$admins = get_active_admins_email($conn);
 
 // Get category name for email
 $categoryName = getCategoryName($conn, $categoryId);

@@ -1,9 +1,5 @@
 <?php
 session_start();
-if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== true) {
-    header("Location: admin-login.php");
-    exit();
-}
 
 // Include database connection
 require_once '../db_connection.php';

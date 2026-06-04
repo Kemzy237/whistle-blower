@@ -9,7 +9,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Include database connection
 include "../db_connection.php";
-include "model/report.php";
+include "model/index.php";
 
 
 // Handle different POST actions
@@ -41,13 +41,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Create audit log
         $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
         $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');
-        
-        $stmt = $conn->prepare("
-            INSERT INTO audit_logs (report_id, action, ip_hash, user_agent_hash, metadata, created_at)
-            VALUES (?, 'report_viewed', ?, ?, ?, NOW())
-        ");
         $metadata = json_encode(['tracking_code' => $trackingCode]);
-        $stmt->execute([$report['id'], $ipHash, $userAgentHash, $metadata]);
+
+        $categoryLogData = [
+            'report_id'       => $report['id'],
+            'action'          => 'report_tracked',
+            'ip_hash'         => $ipHash,
+            'user_agent_hash' => $userAgentHash,
+            'metadata'        => $metadata,
+            'created_at'      => date('Y-m-d H:i:s') // Replacing NOW() with a PHP timestamp
+        ];
+        log_system_action($conn, 'audit_logs', $categoryLogData);
         
         header('Location: ../view-reports.php');
         exit;
@@ -64,14 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         sendMessage($conn, $report["id"], $message, 'whistleblower');
         
         // Get admin emails to notify
-        $stmt = $conn->prepare("SELECT email, name FROM users WHERE role IN ('admin', 'super_admin') AND is_active = 1");
-        $stmt->execute();
-        $admins = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Get report details
-        $stmt = $conn->prepare("SELECT tracking_code FROM reports WHERE id = ?");
-        $stmt->execute([$report['id']]);
-        $report = $stmt->fetch(PDO::FETCH_ASSOC);
+        $admins = get_active_admins_email($conn);
         
         // Send email notification to all admins
         foreach ($admins as $admin) {

@@ -9,7 +9,7 @@ if (!isset($_SESSION["admin_logged_in"]) || $_SESSION["admin_logged_in"] !== tru
 // Log the logout action
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
     require_once 'db_connection.php';
-    require_once __DIR__.'app/model/report.php';
+    require_once __DIR__.'/app/model/index.php';
     
     $ipHash = hash('sha256', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
     $userAgentHash = hash('sha256', $_SERVER['HTTP_USER_AGENT'] ?? 'unknown');

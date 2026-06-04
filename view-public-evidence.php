@@ -3,7 +3,7 @@
 session_start();
 
 require_once __DIR__ . '/db_connection.php';
-require_once __DIR__ . '/app/model/report.php';
+require_once __DIR__ . '/app/model/index.php';
 
 $token = $_GET['token'] ?? $_SESSION['public_access_token'] ?? '';
 

@@ -6,7 +6,7 @@ session_start();
 include 'db_connection.php';
 
 // Include functions
-include "app/model/report.php";
+include "app/model/index.php";
 
 $trackedReport = $_SESSION['tracked_report'] ?? null;
 $trackingCode = $_SESSION['tracking_code'] ?? '';
